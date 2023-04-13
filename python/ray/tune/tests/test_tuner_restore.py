@@ -595,7 +595,7 @@ def test_restore_retry(ray_start_2_cpus, tmpdir, retry_num):
             assert result.metrics["score"] == 2
 
 
-def test_restore_overwrite_trainable(ray_start_2_cpus, tmpdir, caplog):
+def test_restore_overwrite_trainable(ray_start_2_cpus, tmpdir):
     """Test validation for trainable compatibility, when re-specifying a trainable
     on restore."""
 

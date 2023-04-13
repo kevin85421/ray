@@ -214,7 +214,7 @@ class Datastream(Generic[T]):
         >>> # Transform in parallel with map_batches().
         >>> ds.map_batches(lambda batch: [v * 2 for v in batch])
         MapBatches(<lambda>)
-        +- Datastream(num_blocks=17, num_rows=1000, schema=<class 'int'>)
+        +- Datastream(num_blocks=..., num_rows=1000, schema=<class 'int'>)
         >>> # Compute maximum
         >>> ds.max()
         999
