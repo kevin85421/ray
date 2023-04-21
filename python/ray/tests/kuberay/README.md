@@ -17,11 +17,19 @@ RUN git clone -b <my-dev-branch> https://github.com/<my-git-handle>/ray
 RUN python ray/python/ray/setup-dev.py -y
 ```
 
-Build the image and push it to your docker account or registry. Assuming your Dockerfile is named "Dockerfile":
+Build the image. Assuming your Dockerfile is named "Dockerfile":
 ```shell
 docker build --build-arg BUILD_DATE=$(date +%Y-%m-%d:%H:%M:%S) -t <registry>/<repo>:<tag> - < Dockerfile
+```
+
+Now you can either push the docker image to your docker account or registry:
+
+```shell
 docker push <registry>/<repo>:<tag>
 ```
+
+or load the docker image into the kind cluster; see below for instructions.
+
 
 ## Setup Access to a Kubernetes cluster.
 Gain access to a Kubernetes cluster.
@@ -29,6 +37,12 @@ The easiest thing to do is to use KinD.
 ```shell
 brew install kind
 kind create cluster
+```
+
+If you'd like to use the docker image you just built, load it into the cluster:
+
+```shell
+kind load docker-image <registry>/<repo>:<tag>
 ```
 
 ## Install master Ray
@@ -44,13 +58,14 @@ Match your environment's Python version with the Ray image you are using.
 # Set up the operator.
 python setup/setup_kuberay.py
 # Run the test.
-RAY_IMAGE=<your-image> python test_autoscaling_e2e.py
+RAY_IMAGE=<registry>/<repo>:<tag> python test_autoscaling_e2e.py
 # Tear RayClusters and operator down.
 python setup/teardown_kuberay.py
 ```
 
 The test itself does not tear down resources on failure; you can
-- examine a Ray cluster from a failed test (`kubectl get pod`, `kubectl get raycluster`)
+- examine a Ray cluster from a failed test (`kubectl get pods`, `kubectl get pod`, `kubectl get raycluster`)
+- view all logs (`kubectl logs <head pod name>`) or just logs associated with the autoscaler (`kubectl logs <head pod name> -c autoscaler`)
 - delete the Ray cluster (`kubectl delete raycluster -A`)
-- rerun the test without tearing the operator down (`RAY_IMAGE=<your-image> python test_autoscaling_e2e.py`)
+- rerun the test without tearing the operator down (`RAY_IMAGE=<registry>/<repo>:<tag> python test_autoscaling_e2e.py`)
 - tear down the operator when you're done `python setup/teardown_kuberay.py`
