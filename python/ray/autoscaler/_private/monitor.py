@@ -1,8 +1,9 @@
 """Autoscaler monitoring loop daemon."""
 
+import textwrap
 import argparse
 import json
-import logging.handlers
+import logging
 import os
 import signal
 import sys
@@ -683,6 +684,16 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+
+    message = ""
+    for name, logobj in logging.root.manager.loggerDict.items():
+        message += f"{name}\n"
+        if not isinstance(logobj, logging.PlaceHolder):
+            for h in logobj.handlers:
+                message += f"{textwrap.indent(str(h), '  ')}\n"
+
+    logging.critical(message)
+
     setup_component_logger(
         logging_level=args.logging_level,
         logging_format=args.logging_format,

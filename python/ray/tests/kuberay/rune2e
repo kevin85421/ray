@@ -20,7 +20,9 @@ if hasopt '-d' "$@"; then
 fi
 
 if hasopt '-b' "$@"; then
-    docker build --build-arg BUILD_DATE="$(date +%Y-%m-%d:%H:%M:%S)" -t $RAY_IMAGE . || exit
+    pushd ../../../..
+    docker build --build-arg BUILD_DATE="$(date +%Y-%m-%d:%H:%M:%S)" -t $RAY_IMAGE -f ./python/ray/tests/kuberay/Dockerfile . || exit
+    popd || exit
 fi
 
 kind create cluster || exit
