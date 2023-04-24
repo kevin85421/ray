@@ -117,7 +117,6 @@ class KubeRayAutoscalingTest(unittest.TestCase):
             for container in containers:
                 container["imagePullPolicy"] = PULL_POLICY
 
-
         autoscaler_options = {
             "image": AUTOSCALER_IMAGE,
             "imagePullPolicy": PULL_POLICY,

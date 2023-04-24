@@ -1,7 +1,7 @@
-import textwrap
 import logging
 import os
 import subprocess
+import textwrap
 import time
 
 import ray
@@ -56,10 +56,8 @@ def run_kuberay_autoscaler(cluster_name: str, cluster_namespace: str):
                 msg.append(textwrap.indent(str(h), "  "))
 
     logger = logging.getLogger(__name__)
-    logger.addHandler(logging._StderrHandler())
+    logger.critical("~~~~~~~~~~~~run_autoscaler.py~~~~~~~~~~~~~")
     logger.critical("\n".join(msg))
-    print("\n".join(msg))
-    print("HEY THERE SHOULD BE A MESSAGE ABOVE ^")
 
     # autoscaling_config_producer reads the RayCluster CR from K8s and uses the CR
     # to output an autoscaling config.

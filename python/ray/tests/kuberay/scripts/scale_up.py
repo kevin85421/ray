@@ -25,7 +25,9 @@ def main():
             for h in l.handlers:
                 msg.append(textwrap.indent(str(h), "  "))
 
-    logging.getLogger(__name__).critical("\n".join(msg))
+    logger = logging.getLogger(__name__)
+    logger.critical("~~~~~~~~~~~~~~~scale_up.py~~~~~~~~~~~~~~")
+    logger.critical("\n".join(msg))
     ray.autoscaler.sdk.request_resources(num_cpus=2)
 
 
