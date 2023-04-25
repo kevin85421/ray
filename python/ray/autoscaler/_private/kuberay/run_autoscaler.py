@@ -1,7 +1,6 @@
 import logging
 import os
 import subprocess
-import textwrap
 import time
 
 import ray
@@ -45,19 +44,6 @@ def run_kuberay_autoscaler(cluster_name: str, cluster_namespace: str):
     # The Ray head container sets up the log directory. Thus, we set up logging
     # only after the Ray head is ready.
     _setup_logging()
-
-    loggers = {f"{logging.root}": logging.root}
-    loggers.update(dict(sorted(logging.root.manager.loggerDict.items())))
-    msg = []
-    for n, l in sorted(loggers.items()):
-        msg.append(f"{n}")
-        if isinstance(l, logging.Logger):
-            for h in l.handlers:
-                msg.append(textwrap.indent(str(h), "  "))
-
-    logger = logging.getLogger(__name__)
-    logger.critical("~~~~~~~~~~~~run_autoscaler.py~~~~~~~~~~~~~")
-    logger.critical("\n".join(msg))
 
     # autoscaling_config_producer reads the RayCluster CR from K8s and uses the CR
     # to output an autoscaling config.
