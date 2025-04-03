@@ -792,7 +792,8 @@ CoreWorker::CoreWorker(CoreWorkerOptions options, const WorkerID &worker_id)
 
   actor_creator_ = std::make_shared<DefaultActorCreator>(gcs_client_);
 
-  const auto dispatch_nccl_send_callback = [this](const ObjectID &object_id, const ActorID &dst_actor_id) {
+  const auto dispatch_nccl_send_callback = [this](const ObjectID &object_id,
+                                                  const ActorID &dst_actor_id) {
     RAY_CHECK(!actor_nccl_group_.empty());
     // TODO: Map dst_actor_id to a rank.
     int64_t dst_rank = 0;
@@ -802,7 +803,7 @@ CoreWorker::CoreWorker(CoreWorkerOptions options, const WorkerID &worker_id)
       }
       dst_rank++;
     }
-    RAY_CHECK(dst_rank < actor_nccl_group_.size());
+    RAY_CHECK(dst_rank < static_cast<int64_t>(actor_nccl_group_.size()));
 
     // Get the RPC client matching src_actor_id's address.
     ActorID src_actor_id = ObjectID::ToActorID(object_id);
@@ -812,18 +813,20 @@ CoreWorker::CoreWorker(CoreWorkerOptions options, const WorkerID &worker_id)
     rpc::ExecuteNcclSendRequest request;
     request.set_dst_rank(dst_rank);
     request.set_object_id(object_id.Binary());
-    rpc_client->ExecuteNcclSend(request, [](Status status, const rpc::ExecuteNcclSendReply &reply) {
-        RAY_CHECK(status.ok());
+    rpc_client->ExecuteNcclSend(
+        request, [](Status status, const rpc::ExecuteNcclSendReply &reply) {
+          RAY_CHECK(status.ok());
         });
   };
-  actor_task_submitter_ = std::make_unique<ActorTaskSubmitter>(*core_worker_client_pool_,
-                                                               *memory_store_,
-                                                               *task_manager_,
-                                                               *actor_creator_,
-                                                               dispatch_nccl_send_callback,
-                                                               on_excess_queueing,
-                                                               io_service_,
-                                                               reference_counter_);
+  actor_task_submitter_ =
+      std::make_unique<ActorTaskSubmitter>(*core_worker_client_pool_,
+                                           *memory_store_,
+                                           *task_manager_,
+                                           *actor_creator_,
+                                           dispatch_nccl_send_callback,
+                                           on_excess_queueing,
+                                           io_service_,
+                                           reference_counter_);
 
   auto node_addr_factory = [this](const NodeID &node_id) {
     absl::optional<rpc::Address> addr;
@@ -877,9 +880,12 @@ CoreWorker::CoreWorker(CoreWorkerOptions options, const WorkerID &worker_id)
     // TODO(swang): Pass in fetch_callback. This should be a Python function
     // that takes in the ObjectRefs plus RayActorObjectMetadata and calls the
     // torch.distributed.recv.
-    p2p_task_argument_waiter_ = std::make_unique<P2pDependencyWaiter>(options_.fetch_p2p_dependency_callback);
-    task_receiver_->Init(
-        core_worker_client_pool_, rpc_address_, task_argument_waiter_.get(), p2p_task_argument_waiter_.get());
+    p2p_task_argument_waiter_ =
+        std::make_unique<P2pDependencyWaiter>(options_.fetch_p2p_dependency_callback);
+    task_receiver_->Init(core_worker_client_pool_,
+                         rpc_address_,
+                         task_argument_waiter_.get(),
+                         p2p_task_argument_waiter_.get());
   }
 
   actor_manager_ = std::make_unique<ActorManager>(
@@ -3411,7 +3417,6 @@ Status CoreWorker::ExecuteTask(
       /*generator_backpressure_num_objects=*/
       task_spec.GeneratorBackpressureNumObjects());
 
-
   // Python part is done. Return objects should be either a local memory buffer
   // or a buffer in Plasma store.
 
@@ -3761,34 +3766,34 @@ Status CoreWorker::GetAndPinArgsForExecutor(const TaskSpecification &task,
 
   for (size_t i = 0; i < task.NumArgs(); ++i) {
     if (task.ArgByRef(i) && task.ArgIsErrorType(i, rpc::ErrorType::OBJECT_IN_PLASMA)) {
-        const auto &arg_ref = task.ArgRef(i);
-        const auto arg_id = ObjectID::FromBinary(arg_ref.object_id());
-        by_ref_plasma_ids.insert(arg_id);
-        auto it = by_ref_indices.find(arg_id);
-        if (it == by_ref_indices.end()) {
-          by_ref_indices.emplace(arg_id, std::vector<size_t>({i}));
-        } else {
-          it->second.push_back(i);
-        }
-        arg_refs->at(i) = arg_ref;
-        // Pin all args passed by reference for the duration of the task.  This
-        // ensures that when the task completes, we can retrieve metadata about
-        // any borrowed ObjectIDs that were serialized in the argument's value.
-        RAY_LOG(DEBUG).WithField(arg_id) << "Incrementing ref for argument ID";
-        reference_counter_->AddLocalReference(arg_id, task.CallSiteString());
-        // Attach the argument's owner's address. This is needed to retrieve the
-        // value from plasma.
-        reference_counter_->AddBorrowedObject(
-            arg_id, ObjectID::Nil(), task.ArgRef(i).owner_address());
-        borrowed_ids->push_back(arg_id);
-        // We need to put an OBJECT_IN_PLASMA error here so the subsequent call to Get()
-        // properly redirects to the plasma store.
-        // NOTE: This needs to be done after adding reference to reference counter
-        // otherwise, the put is a no-op.
-        if (!options_.is_local_mode) {
-          RAY_UNUSED(memory_store_->Put(RayObject(rpc::ErrorType::OBJECT_IN_PLASMA),
-                                        task.ArgId(i)));
-        }
+      const auto &arg_ref = task.ArgRef(i);
+      const auto arg_id = ObjectID::FromBinary(arg_ref.object_id());
+      by_ref_plasma_ids.insert(arg_id);
+      auto it = by_ref_indices.find(arg_id);
+      if (it == by_ref_indices.end()) {
+        by_ref_indices.emplace(arg_id, std::vector<size_t>({i}));
+      } else {
+        it->second.push_back(i);
+      }
+      arg_refs->at(i) = arg_ref;
+      // Pin all args passed by reference for the duration of the task.  This
+      // ensures that when the task completes, we can retrieve metadata about
+      // any borrowed ObjectIDs that were serialized in the argument's value.
+      RAY_LOG(DEBUG).WithField(arg_id) << "Incrementing ref for argument ID";
+      reference_counter_->AddLocalReference(arg_id, task.CallSiteString());
+      // Attach the argument's owner's address. This is needed to retrieve the
+      // value from plasma.
+      reference_counter_->AddBorrowedObject(
+          arg_id, ObjectID::Nil(), task.ArgRef(i).owner_address());
+      borrowed_ids->push_back(arg_id);
+      // We need to put an OBJECT_IN_PLASMA error here so the subsequent call to Get()
+      // properly redirects to the plasma store.
+      // NOTE: This needs to be done after adding reference to reference counter
+      // otherwise, the put is a no-op.
+      if (!options_.is_local_mode) {
+        RAY_UNUSED(memory_store_->Put(RayObject(rpc::ErrorType::OBJECT_IN_PLASMA),
+                                      task.ArgId(i)));
+      }
     } else {
       std::shared_ptr<Buffer> data = nullptr;
       std::shared_ptr<Buffer> metadata = nullptr;
@@ -3801,8 +3806,8 @@ Status CoreWorker::GetAndPinArgsForExecutor(const TaskSpecification &task,
         const auto it = in_actor_dependencies_metadata.find(task.ArgId(i));
         RAY_CHECK(it != in_actor_dependencies_metadata.end());
         data = it->second;
-        metadata = std::make_shared<LocalMemoryBuffer>(const_cast<uint8_t *>(task.ArgMetadata(i)),
-                                                   task.ArgMetadataSize(i));
+        metadata = std::make_shared<LocalMemoryBuffer>(
+            const_cast<uint8_t *>(task.ArgMetadata(i)), task.ArgMetadataSize(i));
       }
       if (task.ArgMetadataSize(i) != 0u) {
         metadata = std::make_shared<LocalMemoryBuffer>(
@@ -3835,8 +3840,8 @@ Status CoreWorker::GetAndPinArgsForExecutor(const TaskSpecification &task,
   bool got_exception = false;
   absl::flat_hash_map<ObjectID, std::shared_ptr<RayObject>> result_map;
   if (options_.is_local_mode) {
-    RAY_RETURN_NOT_OK(
-        memory_store_->Get(by_ref_plasma_ids, -1, worker_context_, &result_map, &got_exception));
+    RAY_RETURN_NOT_OK(memory_store_->Get(
+        by_ref_plasma_ids, -1, worker_context_, &result_map, &got_exception));
   } else {
     RAY_RETURN_NOT_OK(plasma_store_provider_->Get(
         by_ref_plasma_ids, -1, worker_context_, &result_map, &got_exception));
@@ -5089,8 +5094,8 @@ void CoreWorker::UpdateTaskIsDebuggerPaused(const TaskID &task_id,
 }
 
 void CoreWorker::HandleExecuteNcclSend(rpc::ExecuteNcclSendRequest request,
-                           rpc::ExecuteNcclSendReply *reply,
-                           rpc::SendReplyCallback send_reply_callback) {
+                                       rpc::ExecuteNcclSendReply *reply,
+                                       rpc::SendReplyCallback send_reply_callback) {
   // TODO(swang): We should check that this is the correct actor,
   // using either the ActorID or WorkerID.
   ObjectID obj_id = ObjectID::FromBinary(request.object_id());

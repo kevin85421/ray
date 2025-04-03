@@ -1,7 +1,5 @@
 import ray
 import torch
-import socket
-import os
 import torch.distributed as dist
 
 # TODO(amjad/kai-hsun):
@@ -17,7 +15,6 @@ import torch.distributed as dist
 # --> call ncclRecv
 # <-- wait until any plasma args are local
 # - execute the task.
-
 
 
 # 1. Submit A.randn
@@ -39,14 +36,16 @@ import torch.distributed as dist
 
 WORLD_SIZE = 2
 
+
 @ray.remote
 class Actor:
-
     def ping(self):
         return
 
     def setup(self, world_size, rank, init_method, group_name="default"):
-        dist.init_process_group(backend="gloo", world_size=world_size, rank=rank, init_method=init_method)
+        dist.init_process_group(
+            backend="gloo", world_size=world_size, rank=rank, init_method=init_method
+        )
 
     def randn(self, shape):
         return torch.randn(shape)
@@ -66,6 +65,7 @@ class Actor:
         dist.recv(tensor, src_rank)
         worker.in_actor_object_store[meta.obj_id] = tensor
 
+
 if __name__ == "__main__":
     actors = [Actor.remote() for _ in range(WORLD_SIZE)]
     ray.get([a.ping.remote() for a in actors])
@@ -74,12 +74,17 @@ if __name__ == "__main__":
     # TODO: Replace with an API call that takes in a list of actors and
     # returns a handle to the group.
     init_method = "tcp://localhost:8889"
-    ray.get([actor.setup.remote(WORLD_SIZE, rank, init_method) for rank, actor in enumerate(actors)])
+    ray.get(
+        [
+            actor.setup.remote(WORLD_SIZE, rank, init_method)
+            for rank, actor in enumerate(actors)
+        ]
+    )
     actor_ids = [actor._ray_actor_id for actor in actors]
     ray._private.worker.global_worker.core_worker.register_actor_nccl_group(actor_ids)
     print("Collective group setup done")
 
-    shape = (100, )
+    shape = (100,)
 
     ref = actors[0].randn.remote(shape)
     print("ObjectRef:", ref)
@@ -91,7 +96,7 @@ if __name__ == "__main__":
     ## heap object store:
     ## ObjRef(xxx) -> OBJECT_IN_ACTOR, A.address
 
-    ## TODO: On task submission to actor B, driver looks up arguments to the task. 
+    ## TODO: On task submission to actor B, driver looks up arguments to the task.
     ## driver:
     ## - Driver sees that `ref` argument is on actor A.
     ## - Driver submits A.send, B.recv tasks. Include ObjRef.
@@ -101,13 +106,13 @@ if __name__ == "__main__":
     ## - Execute sum. When looking up arguments, it sees OBJECT_IN_ACTOR, so it
     ## gets the actual value from its local actor store (which we know is
     ## already there).
-    #s = ray.get(actors[1].sum.remote(ref))
-    #t = ray.get(ref)
-    #assert t.sum() == s
+    # s = ray.get(actors[1].sum.remote(ref))
+    # t = ray.get(ref)
+    # assert t.sum() == s
 
     ## Instead of calling send/recv manually, we would like to do it
     ## automatically, using the above API.
-    #actors[0].send.remote(1, ref)
-    #recved = actors[1].recv.remote(0, shape)
-    #s = ray.get(actors[1].sum.remote(recved))
-    #assert t.sum() == s
+    # actors[0].send.remote(1, ref)
+    # recved = actors[1].recv.remote(0, shape)
+    # s = ray.get(actors[1].sum.remote(recved))
+    # assert t.sum() == s

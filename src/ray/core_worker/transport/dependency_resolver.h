@@ -30,7 +30,8 @@ namespace core {
 // This class is thread-safe.
 class LocalDependencyResolver {
  public:
-  using DispatchNcclSendCallback = std::function<void(const ObjectID &object_id, const ActorID &dst_actor_id)>;
+  using DispatchNcclSendCallback =
+      std::function<void(const ObjectID &object_id, const ActorID &dst_actor_id)>;
   LocalDependencyResolver(CoreWorkerMemoryStore &store,
                           TaskFinisherInterface &task_finisher,
                           ActorCreatorInterface &actor_creator,

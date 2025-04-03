@@ -86,14 +86,14 @@ class P2pDependencyWaiter {
  public:
   using DependencyMetadata = std::unordered_map<ObjectID, std::shared_ptr<Buffer>>;
 
-  P2pDependencyWaiter(std::function<void(DependencyMetadata &dependencies)> fetch_callback);
+  P2pDependencyWaiter(
+      std::function<void(DependencyMetadata &dependencies)> fetch_callback);
 
   void Wait(DependencyMetadata &dependencies,
             std::function<void()> on_dependencies_available);
 
  private:
   std::function<void(DependencyMetadata &)> fetch_callback_;
-
 };
 
 }  // namespace core

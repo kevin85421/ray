@@ -446,7 +446,8 @@ bool TaskManager::HandleTaskReturn(const ObjectID &object_id,
   const auto nested_refs =
       VectorFromProtobuf<rpc::ObjectReference>(return_object.nested_inlined_refs());
 
-  RAY_LOG(WARNING) << "Task return object " << object_id << (return_object.in_plasma() ? " stored in plasma " : " inlined");
+  RAY_LOG(WARNING) << "Task return object " << object_id
+                   << (return_object.in_plasma() ? " stored in plasma " : " inlined");
 
   if (return_object.in_plasma()) {
     // NOTE(swang): We need to add the location of the object before marking
