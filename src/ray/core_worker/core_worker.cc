@@ -733,7 +733,12 @@ CoreWorker::CoreWorker(CoreWorkerOptions options, const WorkerID &worker_id)
       },
       push_error_callback,
       RayConfig::instance().max_lineage_bytes(),
-      *task_event_buffer_);
+      *task_event_buffer_,
+      /*get_actor_rpc_client_callback=*/
+      [this](const ActorID &actor_id) {
+        auto addr = actor_manager_->GetActorAddress(actor_id);
+        return core_worker_client_pool_->GetOrConnect(addr);
+      });
 
   // Create an entry for the driver task in the task table. This task is
   // added immediately with status RUNNING. This allows us to push errors
@@ -5101,6 +5106,15 @@ void CoreWorker::HandleExecuteNcclSend(rpc::ExecuteNcclSendRequest request,
   ObjectID obj_id = ObjectID::FromBinary(request.object_id());
   RAY_LOG(INFO) << "ExecuteNcclSend " << obj_id;
   options_.send_p2p_dependency_callback(obj_id, request.dst_rank());
+  send_reply_callback(Status::OK(), nullptr, nullptr);
+}
+
+void CoreWorker::HandleCleanUpInActorObject(rpc::CleanUpInActorObjectRequest request,
+                                            rpc::CleanUpInActorObjectReply *reply,
+                                            rpc::SendReplyCallback send_reply_callback) {
+  // TODO: Clean up the object in the actor.
+  ObjectID object_id = ObjectID::FromBinary(request.object_id());
+  RAY_LOG(INFO) << "CleanUpInActorObject " << object_id;
   send_reply_callback(Status::OK(), nullptr, nullptr);
 }
 
