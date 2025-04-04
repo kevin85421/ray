@@ -140,7 +140,7 @@ void ActorSchedulingQueue::Add(
           ScheduleRequests();
         }
       });
-      });
+    });
   } else {
     RAY_UNUSED(task_event_buffer_.RecordTaskStatusEventIfNeeded(
         task_spec.TaskId(),

@@ -435,12 +435,12 @@ class SerializationContext:
                 else:
                     actor_id = None
                 return ActorUnavailableError(error_info.error_message, actor_id)
-            elif error_type == ErrorType.Value(
-                "OBJECT_IN_ACTOR"
-            ):
+            elif error_type == ErrorType.Value("OBJECT_IN_ACTOR"):
                 # Look up the actual object from our local Python object
                 # store. Hopefully it's actually there.
-                meta = self._deserialize_msgpack_data(data, [ray_constants.OBJECT_METADATA_TYPE_PYTHON])
+                meta = self._deserialize_msgpack_data(
+                    data, [ray_constants.OBJECT_METADATA_TYPE_PYTHON]
+                )
                 worker = ray._private.worker.global_worker
                 assert meta.obj_id in worker.in_actor_object_store
                 return worker.in_actor_object_store[meta.obj_id]

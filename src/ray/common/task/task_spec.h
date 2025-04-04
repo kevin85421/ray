@@ -509,7 +509,8 @@ class TaskSpecification : public MessageWrapper<rpc::TaskSpec> {
 
   rpc::ErrorType ArgErrorType(size_t arg_index) const;
 
-  std::unordered_map<ObjectID, std::shared_ptr<Buffer>> GetInActorDependenciesMetadata() const;
+  std::unordered_map<ObjectID, std::shared_ptr<Buffer>> GetInActorDependenciesMetadata()
+      const;
 
   std::vector<rpc::ObjectReference> GetInActorDependencies() const;
 

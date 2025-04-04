@@ -406,6 +406,12 @@ message ExecuteNcclSendRequest {
 
 message ExecuteNcclSendReply {}
 
+message CleanUpInActorObjectRequest {
+  bytes object_id = 1;
+}
+
+message CleanUpInActorObjectReply {}
+
 message ReportGeneratorItemReturnsRequest {
   // The intermediate return object that's dynamically
   // generated from the executor side.
@@ -508,4 +514,6 @@ service CoreWorkerService {
   rpc RegisterMutableObjectReader(RegisterMutableObjectReaderRequest)
       returns (RegisterMutableObjectReaderReply);
   rpc ExecuteNcclSend(ExecuteNcclSendRequest) returns (ExecuteNcclSendReply);
+  rpc CleanUpInActorObject(CleanUpInActorObjectRequest)
+      returns (CleanUpInActorObjectReply);
 }

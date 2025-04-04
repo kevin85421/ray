@@ -76,10 +76,12 @@ void DependencyWaiterImpl::OnWaitComplete(int64_t tag) {
   requests_.erase(it);
 }
 
-P2pDependencyWaiter::P2pDependencyWaiter(std::function<void(DependencyMetadata &dependencies)> fetch_callback) : fetch_callback_(fetch_callback) {}
+P2pDependencyWaiter::P2pDependencyWaiter(
+    std::function<void(DependencyMetadata &dependencies)> fetch_callback)
+    : fetch_callback_(fetch_callback) {}
 
 void P2pDependencyWaiter::Wait(DependencyMetadata &dependencies,
-            std::function<void()> on_dependencies_available) {
+                               std::function<void()> on_dependencies_available) {
   for (const auto &dep : dependencies) {
     RAY_LOG(INFO) << "WAIT ON IN_ACTOR DEP " << dep.first;
   }

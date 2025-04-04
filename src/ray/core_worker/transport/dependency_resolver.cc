@@ -22,7 +22,8 @@ namespace {
 void InlineDependencies(
     const absl::flat_hash_map<ObjectID, std::shared_ptr<RayObject>> &dependencies,
     TaskSpecification &task,
-    std::function<void(const ObjectID &object_id, const ActorID &dst_actor_id)> &dispatch_nccl_send_callback,
+    std::function<void(const ObjectID &object_id, const ActorID &dst_actor_id)>
+        &dispatch_nccl_send_callback,
     std::vector<ObjectID> *inlined_dependency_ids,
     std::vector<ObjectID> *contained_ids) {
   auto &msg = task.GetMutableMessage();

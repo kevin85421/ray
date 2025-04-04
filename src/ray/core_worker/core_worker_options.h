@@ -69,8 +69,10 @@ struct CoreWorkerOptions {
       // can run without a pause.
       int64_t generator_backpressure_num_objects)>;
 
-  using FetchP2pDependencyCallback = std::function<void(std::unordered_map<ObjectID, std::shared_ptr<Buffer>> &)>;
-  using SendP2pDependencyCallback = std::function<void(const ObjectID &, int64_t dst_rank)>;
+  using FetchP2pDependencyCallback =
+      std::function<void(std::unordered_map<ObjectID, std::shared_ptr<Buffer>> &)>;
+  using SendP2pDependencyCallback =
+      std::function<void(const ObjectID &, int64_t dst_rank)>;
 
   CoreWorkerOptions()
       : store_socket(""),

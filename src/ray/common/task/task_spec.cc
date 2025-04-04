@@ -22,9 +22,7 @@
 #include "ray/stats/metric_defs.h"
 #include "ray/util/logging.h"
 
-namespace {
-
-}
+namespace {}
 
 namespace ray {
 
@@ -292,15 +290,17 @@ size_t TaskSpecification::ArgDataSize(size_t arg_index) const {
   return message_->args(arg_index).data().size();
 }
 
-bool TaskSpecification::ArgIsErrorType(size_t arg_index, rpc::ErrorType error_type) const {
-  const std::string_view metadata(message_->args(arg_index).metadata().data(), message_->args(arg_index).metadata().size());
+bool TaskSpecification::ArgIsErrorType(size_t arg_index,
+                                       rpc::ErrorType error_type) const {
+  const std::string_view metadata(message_->args(arg_index).metadata().data(),
+                                  message_->args(arg_index).metadata().size());
   return metadata == std::to_string(error_type);
 }
 
 rpc::ErrorType TaskSpecification::ArgErrorType(size_t arg_index) const {
-  //const std::string_view metadata(message_->args(arg_index).data().data(), message_->args(arg_index).data().size());
-  //int error = std::stoi(metadata);
-  //RAY_CHECK(rpc::ErrorType_IsValid(error));
+  // const std::string_view metadata(message_->args(arg_index).data().data(),
+  // message_->args(arg_index).data().size()); int error = std::stoi(metadata);
+  // RAY_CHECK(rpc::ErrorType_IsValid(error));
   return static_cast<rpc::ErrorType>(0);
 }
 
@@ -647,10 +647,12 @@ std::vector<ConcurrencyGroup> TaskSpecification::ConcurrencyGroups() const {
   return concurrency_groups;
 }
 
-std::unordered_map<ObjectID, std::shared_ptr<Buffer>> TaskSpecification::GetInActorDependenciesMetadata() const {
+std::unordered_map<ObjectID, std::shared_ptr<Buffer>>
+TaskSpecification::GetInActorDependenciesMetadata() const {
   std::unordered_map<ObjectID, std::shared_ptr<Buffer>> deps;
   for (const auto &dep : message_->in_actor_dependencies()) {
-    deps[ObjectID::FromBinary(dep.object_id())] = std::make_shared<LocalMemoryBuffer>(reinterpret_cast<const uint8_t *>(dep.metadata().data()), dep.metadata().size());
+    deps[ObjectID::FromBinary(dep.object_id())] = std::make_shared<LocalMemoryBuffer>(
+        reinterpret_cast<const uint8_t *>(dep.metadata().data()), dep.metadata().size());
   }
   return deps;
 }
