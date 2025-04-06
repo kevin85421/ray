@@ -198,9 +198,9 @@ class CoreWorkerClientInterface : public pubsub::SubscriberClientInterface {
   virtual void ExecuteNcclSend(const ExecuteNcclSendRequest &request,
                                const ClientCallback<ExecuteNcclSendReply> &callback) {}
 
-  virtual void CleanUpInActorObject(const CleanUpInActorObjectRequest &request,
-                                    const ClientCallback<CleanUpInActorObjectReply> &callback) {
-  }
+  virtual void CleanUpInActorObject(
+      const CleanUpInActorObjectRequest &request,
+      const ClientCallback<CleanUpInActorObjectReply> &callback) {}
 
   /// Returns the max acked sequence number, useful for checking on progress.
   virtual int64_t ClientProcessedUpToSeqno() { return -1; }

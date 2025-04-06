@@ -496,10 +496,12 @@ bool TaskManager::HandleTaskReturn(const ObjectID &object_id,
         auto rpc_client = get_actor_rpc_client_callback_(actor_id);
         auto request = rpc::CleanUpInActorObjectRequest();
         request.set_object_id(object_id.Binary());
-        RAY_LOG(INFO) << "CleanUpInActorObject " << object_id << " binary: " << object_id.Binary();
-        rpc_client->CleanUpInActorObject(request, [](Status status, const rpc::CleanUpInActorObjectReply &reply) {
-          RAY_CHECK(status.ok());
-        });
+        RAY_LOG(INFO) << "CleanUpInActorObject " << object_id
+                      << " binary: " << object_id.Binary();
+        rpc_client->CleanUpInActorObject(
+            request, [](Status status, const rpc::CleanUpInActorObjectReply &reply) {
+              RAY_CHECK(status.ok());
+            });
       });
 
   rpc::Address owner_address;

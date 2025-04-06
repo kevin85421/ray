@@ -2248,7 +2248,6 @@ cdef execute_task_with_cancellation_handler(
                 " for this method.")
 
 cdef void clean_up_in_actor_object_callback(const CObjectID &c_object_id) nogil:
-    # TODO(Kai-Hsun): Implement the real clean up logic here.
     with gil:
         object_id = ObjectRef(c_object_id.Binary()).hex().encode('ascii')
         in_actor_object_store = ray._private.worker.global_worker.in_actor_object_store

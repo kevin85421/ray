@@ -22,8 +22,6 @@
 #include "ray/stats/metric_defs.h"
 #include "ray/util/logging.h"
 
-namespace {}
-
 namespace ray {
 
 absl::Mutex TaskSpecification::mutex_;
