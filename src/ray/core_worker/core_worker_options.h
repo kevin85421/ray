@@ -86,6 +86,7 @@ struct CoreWorkerOptions {
         raylet_ip_address(""),
         driver_name(""),
         task_execution_callback(nullptr),
+        clean_up_in_actor_object_callback(nullptr),
         fetch_p2p_dependency_callback(nullptr),
         send_p2p_dependency_callback(nullptr),
         check_signals(nullptr),
@@ -145,6 +146,8 @@ struct CoreWorkerOptions {
   std::string driver_name;
   /// Language worker callback to execute tasks.
   TaskExecutionCallback task_execution_callback;
+  /// Callback to clean up object in actor object store.
+  std::function<void(const ObjectID &)> clean_up_in_actor_object_callback;
   FetchP2pDependencyCallback fetch_p2p_dependency_callback;
   SendP2pDependencyCallback send_p2p_dependency_callback;
   /// The callback to be called when shutting down a `CoreWorker` instance.
