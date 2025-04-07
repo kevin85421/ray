@@ -69,8 +69,10 @@ struct CoreWorkerOptions {
       // can run without a pause.
       int64_t generator_backpressure_num_objects)>;
 
-  using FetchP2pDependencyCallback = std::function<void(std::unordered_map<ObjectID, std::shared_ptr<Buffer>> &)>;
-  using SendP2pDependencyCallback = std::function<void(const ObjectID &, int64_t dst_rank)>;
+  using FetchP2pDependencyCallback =
+      std::function<void(std::unordered_map<ObjectID, std::shared_ptr<Buffer>> &)>;
+  using SendP2pDependencyCallback =
+      std::function<void(const ObjectID &, int64_t dst_rank)>;
 
   CoreWorkerOptions()
       : store_socket(""),
@@ -84,6 +86,7 @@ struct CoreWorkerOptions {
         raylet_ip_address(""),
         driver_name(""),
         task_execution_callback(nullptr),
+        clean_up_in_actor_object_callback(nullptr),
         fetch_p2p_dependency_callback(nullptr),
         send_p2p_dependency_callback(nullptr),
         check_signals(nullptr),
@@ -143,6 +146,8 @@ struct CoreWorkerOptions {
   std::string driver_name;
   /// Language worker callback to execute tasks.
   TaskExecutionCallback task_execution_callback;
+  /// Callback to clean up object in actor object store.
+  std::function<void(const ObjectID &)> clean_up_in_actor_object_callback;
   FetchP2pDependencyCallback fetch_p2p_dependency_callback;
   SendP2pDependencyCallback send_p2p_dependency_callback;
   /// The callback to be called when shutting down a `CoreWorker` instance.

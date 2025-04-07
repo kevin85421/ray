@@ -22,7 +22,8 @@ namespace {
 void InlineDependencies(
     const absl::flat_hash_map<ObjectID, std::shared_ptr<RayObject>> &dependencies,
     TaskSpecification &task,
-    std::function<void(const ObjectID &object_id, const ActorID &dst_actor_id)> &dispatch_nccl_send_callback,
+    std::function<void(const ObjectID &object_id, const ActorID &dst_actor_id)>
+        &dispatch_nccl_send_callback,
     std::vector<ObjectID> *inlined_dependency_ids,
     std::vector<ObjectID> *contained_ids) {
   auto &msg = task.GetMutableMessage();
@@ -50,7 +51,15 @@ void InlineDependencies(
           const auto &data = it->second->GetData();
           dep->set_metadata(data->Data(), data->Size());
 
-          dispatch_nccl_send_callback(id, task.ActorId());
+          // If the object has already been in the receiver actor, we don't need to ask
+          // the sender actor to call NCCL send.
+          auto dst_actor_id = task.ActorId();
+          auto src_actor_id = ObjectID::ToActorID(id);
+          RAY_LOG(INFO) << "InlineDependencies: dst_actor_id: " << dst_actor_id
+                        << " src_actor_id: " << src_actor_id;
+          if (dst_actor_id != src_actor_id) {
+            dispatch_nccl_send_callback(id, task.ActorId());
+          }
         } else if (!it->second->IsInPlasmaError()) {
           // The object has not been promoted to plasma. Inline the object by
           // clearing the reference and replacing it with the raw value.

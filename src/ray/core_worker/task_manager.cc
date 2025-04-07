@@ -446,7 +446,8 @@ bool TaskManager::HandleTaskReturn(const ObjectID &object_id,
   const auto nested_refs =
       VectorFromProtobuf<rpc::ObjectReference>(return_object.nested_inlined_refs());
 
-  RAY_LOG(WARNING) << "Task return object " << object_id << (return_object.in_plasma() ? " stored in plasma " : " inlined");
+  RAY_LOG(WARNING) << "Task return object " << object_id
+                   << (return_object.in_plasma() ? " stored in plasma " : " inlined");
 
   if (return_object.in_plasma()) {
     // NOTE(swang): We need to add the location of the object before marking
@@ -483,6 +484,26 @@ bool TaskManager::HandleTaskReturn(const ObjectID &object_id,
       put_in_local_plasma_callback_(object, object_id);
     } else {
       direct_return = in_memory_store_.Put(object, object_id);
+    }
+
+    if (object.IsInActorError()) {
+      RAY_LOG(INFO) << "Object is stored in actor object store, registering cleanup "
+                       "callback for object ID: "
+                    << object_id;
+      reference_counter_.AddObjectOutOfScopeOrFreedCallback(
+          object_id, [this](const ObjectID &object_id) {
+            RAY_LOG(INFO) << "CleanUpInActorObject is called to notify the actor to "
+                             "clean up the object, object_id: "
+                          << object_id;
+            auto actor_id = ObjectID::ToActorID(object_id);
+            auto rpc_client = get_actor_rpc_client_callback_(actor_id);
+            auto request = rpc::CleanUpInActorObjectRequest();
+            request.set_object_id(object_id.Binary());
+            rpc_client->CleanUpInActorObject(
+                request, [](Status status, const rpc::CleanUpInActorObjectReply &reply) {
+                  RAY_CHECK(status.ok());
+                });
+          });
     }
   }
 

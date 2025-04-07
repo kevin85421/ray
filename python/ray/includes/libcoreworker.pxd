@@ -405,6 +405,7 @@ cdef extern from "ray/core_worker/core_worker.h" nogil:
             c_bool should_retry_exceptions,
             int64_t generator_backpressure_num_objects
         ) nogil) task_execution_callback
+        (void(const CObjectID &) nogil) clean_up_in_actor_object_callback
         (void(
             unordered_map[CObjectID, shared_ptr[CBuffer]] &arg_refs,
         ) nogil) fetch_p2p_dependency_callback

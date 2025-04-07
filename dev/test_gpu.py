@@ -1,7 +1,5 @@
 import ray
 import torch
-import socket
-import os
 import torch.distributed as dist
 
 # TODO(amjad/kai-hsun):
@@ -17,7 +15,6 @@ import torch.distributed as dist
 # --> call ncclRecv
 # <-- wait until any plasma args are local
 # - execute the task.
-
 
 
 # 1. Submit A.randn
@@ -39,16 +36,19 @@ import torch.distributed as dist
 
 WORLD_SIZE = 2
 
+
 @ray.remote
 class Actor:
-
     def ping(self):
         return
 
     def setup(self, world_size, rank, init_method, group_name="default"):
-        dist.init_process_group(backend="gloo", world_size=world_size, rank=rank, init_method=init_method)
+        dist.init_process_group(
+            backend="gloo", world_size=world_size, rank=rank, init_method=init_method
+        )
 
     def randn(self, shape):
+        print("randn shape: ", shape)
         return torch.randn(shape)
 
     def sum(self, tensor):
@@ -66,6 +66,10 @@ class Actor:
         dist.recv(tensor, src_rank)
         worker.in_actor_object_store[meta.obj_id] = tensor
 
+    def echo(self, tensor):
+        print("echo tensor: ", tensor)
+
+
 if __name__ == "__main__":
     actors = [Actor.remote() for _ in range(WORLD_SIZE)]
     ray.get([a.ping.remote() for a in actors])
@@ -74,24 +78,41 @@ if __name__ == "__main__":
     # TODO: Replace with an API call that takes in a list of actors and
     # returns a handle to the group.
     init_method = "tcp://localhost:8889"
-    ray.get([actor.setup.remote(WORLD_SIZE, rank, init_method) for rank, actor in enumerate(actors)])
+    ray.get(
+        [
+            actor.setup.remote(WORLD_SIZE, rank, init_method)
+            for rank, actor in enumerate(actors)
+        ]
+    )
     actor_ids = [actor._ray_actor_id for actor in actors]
     ray._private.worker.global_worker.core_worker.register_actor_nccl_group(actor_ids)
     print("Collective group setup done")
 
-    shape = (100, )
+    shape = (100,)
 
-    ref = actors[0].randn.remote(shape)
-    print("ObjectRef:", ref)
-    ref = actors[1].sum.remote(ref)
+    print("Pass tensor to different actor via collective API:")
+    tensor_ref = actors[0].randn.remote(shape)
+    print("ObjectRef:", tensor_ref)
+    ref = actors[1].sum.remote(tensor_ref)
     print("Waiting on ref", ref)
     print(ray.get(ref))
+
+    del tensor_ref
+
+    print("Pass tensor to the same actor via in-actor object store:")
+    tensor_ref = actors[0].randn.remote((3,))
+    print("ObjectRef:", tensor_ref)
+    ref = actors[0].echo.remote(tensor_ref)
+    print("Waiting on ref", ref)
+    print(ray.get(ref))
+
+    del tensor_ref
 
     ## After getting response from actor A, driver will now have in its local
     ## heap object store:
     ## ObjRef(xxx) -> OBJECT_IN_ACTOR, A.address
 
-    ## TODO: On task submission to actor B, driver looks up arguments to the task. 
+    ## TODO: On task submission to actor B, driver looks up arguments to the task.
     ## driver:
     ## - Driver sees that `ref` argument is on actor A.
     ## - Driver submits A.send, B.recv tasks. Include ObjRef.
@@ -101,13 +122,13 @@ if __name__ == "__main__":
     ## - Execute sum. When looking up arguments, it sees OBJECT_IN_ACTOR, so it
     ## gets the actual value from its local actor store (which we know is
     ## already there).
-    #s = ray.get(actors[1].sum.remote(ref))
-    #t = ray.get(ref)
-    #assert t.sum() == s
+    # s = ray.get(actors[1].sum.remote(ref))
+    # t = ray.get(ref)
+    # assert t.sum() == s
 
     ## Instead of calling send/recv manually, we would like to do it
     ## automatically, using the above API.
-    #actors[0].send.remote(1, ref)
-    #recved = actors[1].recv.remote(0, shape)
-    #s = ray.get(actors[1].sum.remote(recved))
-    #assert t.sum() == s
+    # actors[0].send.remote(1, ref)
+    # recved = actors[1].recv.remote(0, shape)
+    # s = ray.get(actors[1].sum.remote(recved))
+    # assert t.sum() == s
