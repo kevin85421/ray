@@ -2286,6 +2286,11 @@ cdef void fetch_p2p_dependency_handler(
         metadata = ray._private.worker.global_worker.deserialize_objects(
             data_metadata_pairs, ids_to_deserialize)[0]
 
+        obj_id = metadata.obj_id
+        if obj_id in ray._private.worker.global_worker.in_actor_object_store:
+            print(f"obj_id {obj_id} already in in_actor_object_store")
+            return
+
         # Perform the recv.
         tensor = torch.zeros(metadata.shape, dtype=metadata.dtype)
         dist.recv(tensor, metadata.src_rank)

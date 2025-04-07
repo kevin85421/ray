@@ -492,7 +492,9 @@ bool TaskManager::HandleTaskReturn(const ObjectID &object_id,
                     << object_id;
       reference_counter_.AddObjectOutOfScopeOrFreedCallback(
           object_id, [this](const ObjectID &object_id) {
-            RAY_LOG(INFO) << "CleanUpInActorObject is called to notify the actor to clean up the object, object_id: " << object_id;
+            RAY_LOG(INFO) << "CleanUpInActorObject is called to notify the actor to "
+                             "clean up the object, object_id: "
+                          << object_id;
             auto actor_id = ObjectID::ToActorID(object_id);
             auto rpc_client = get_actor_rpc_client_callback_(actor_id);
             auto request = rpc::CleanUpInActorObjectRequest();

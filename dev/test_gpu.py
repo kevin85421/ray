@@ -48,6 +48,7 @@ class Actor:
         )
 
     def randn(self, shape):
+        print("randn shape: ", shape)
         return torch.randn(shape)
 
     def sum(self, tensor):
@@ -64,6 +65,9 @@ class Actor:
         tensor = torch.zeros(meta.shape, dtype=meta.dtype)
         dist.recv(tensor, src_rank)
         worker.in_actor_object_store[meta.obj_id] = tensor
+
+    def echo(self, tensor):
+        print("echo tensor: ", tensor)
 
 
 if __name__ == "__main__":
@@ -86,11 +90,23 @@ if __name__ == "__main__":
 
     shape = (100,)
 
-    ref = actors[0].randn.remote(shape)
-    print("ObjectRef:", ref)
-    ref = actors[1].sum.remote(ref)
+    print("Pass tensor to different actor via collective API:")
+    tensor_ref = actors[0].randn.remote(shape)
+    print("ObjectRef:", tensor_ref)
+    ref = actors[1].sum.remote(tensor_ref)
     print("Waiting on ref", ref)
     print(ray.get(ref))
+
+    del tensor_ref
+
+    print("Pass tensor to the same actor via in-actor object store:")
+    tensor_ref = actors[0].randn.remote((3,))
+    print("ObjectRef:", tensor_ref)
+    ref = actors[0].echo.remote(tensor_ref)
+    print("Waiting on ref", ref)
+    print(ray.get(ref))
+
+    del tensor_ref
 
     ## After getting response from actor A, driver will now have in its local
     ## heap object store:
