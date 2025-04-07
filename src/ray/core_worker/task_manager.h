@@ -211,14 +211,16 @@ class ObjectRefStream {
 
 class TaskManager : public TaskFinisherInterface, public TaskResubmissionInterface {
  public:
-  TaskManager(CoreWorkerMemoryStore &in_memory_store,
-              ReferenceCounter &reference_counter,
-              PutInLocalPlasmaCallback put_in_local_plasma_callback,
-              RetryTaskCallback retry_task_callback,
-              PushErrorCallback push_error_callback,
-              int64_t max_lineage_bytes,
-              worker::TaskEventBuffer &task_event_buffer,
-              std::function<std::shared_ptr<ray::rpc::CoreWorkerClientInterface>(const ActorID &)> client_factory)
+  TaskManager(
+      CoreWorkerMemoryStore &in_memory_store,
+      ReferenceCounter &reference_counter,
+      PutInLocalPlasmaCallback put_in_local_plasma_callback,
+      RetryTaskCallback retry_task_callback,
+      PushErrorCallback push_error_callback,
+      int64_t max_lineage_bytes,
+      worker::TaskEventBuffer &task_event_buffer,
+      std::function<std::shared_ptr<ray::rpc::CoreWorkerClientInterface>(const ActorID &)>
+          client_factory)
       : in_memory_store_(in_memory_store),
         reference_counter_(reference_counter),
         put_in_local_plasma_callback_(std::move(put_in_local_plasma_callback)),

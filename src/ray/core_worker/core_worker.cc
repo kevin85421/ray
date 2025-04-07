@@ -5112,7 +5112,6 @@ void CoreWorker::HandleExecuteNcclSend(rpc::ExecuteNcclSendRequest request,
 void CoreWorker::HandleCleanUpInActorObject(rpc::CleanUpInActorObjectRequest request,
                                             rpc::CleanUpInActorObjectReply *reply,
                                             rpc::SendReplyCallback send_reply_callback) {
-  // TODO(Kai-Hsun): Clean up the object in the actor.
   RAY_LOG(INFO) << "HandleCleanUpInActorObject " << request.object_id();
   ObjectID object_id = ObjectID::FromBinary(request.object_id());
   options_.clean_up_in_actor_object_callback(object_id);
