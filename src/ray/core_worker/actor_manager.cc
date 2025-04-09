@@ -210,6 +210,16 @@ void ActorManager::WaitForActorRefDeleted(
   }
 }
 
+rpc::Address ActorManager::GetActorAddress(const ActorID &actor_id) const {
+  absl::MutexLock lock(&cache_mutex_);
+  rpc::Address addr;
+  auto it = cached_actor_addresses_.find(actor_id);
+  if (it != cached_actor_addresses_.end()) {
+    addr = it->second;
+  }
+  return addr;
+}
+
 void ActorManager::HandleActorStateNotification(const ActorID &actor_id,
                                                 const rpc::ActorTableData &actor_data) {
   const auto &actor_state = rpc::ActorTableData::ActorState_Name(actor_data.state());
@@ -245,6 +255,10 @@ void ActorManager::HandleActorStateNotification(const ActorID &actor_id,
   } else if (actor_data.state() == rpc::ActorTableData::ALIVE) {
     actor_task_submitter_.ConnectActor(
         actor_id, actor_data.address(), actor_data.num_restarts());
+
+    // TODO(Kai-Hsun): handle value already exists.
+    absl::MutexLock lock(&cache_mutex_);
+    cached_actor_addresses_.emplace(actor_id, actor_data.address());
   } else {
     // The actor is being created and not yet ready, just ignore!
   }

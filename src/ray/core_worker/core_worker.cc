@@ -741,7 +741,12 @@ CoreWorker::CoreWorker(CoreWorkerOptions options, const WorkerID &worker_id)
       },
       push_error_callback,
       RayConfig::instance().max_lineage_bytes(),
-      *task_event_buffer_);
+      *task_event_buffer_,
+      /*get_actor_rpc_client_callback=*/
+      [this](const ActorID &actor_id) {
+        auto addr = actor_manager_->GetActorAddress(actor_id);
+        return core_worker_client_pool_->GetOrConnect(addr);
+      });
 
   // Create an entry for the driver task in the task table. This task is
   // added immediately with status RUNNING. This allows us to push errors
@@ -5069,6 +5074,15 @@ void CoreWorker::UpdateTaskIsDebuggerPaused(const TaskID &task_id,
       rpc::TaskStatus::NIL,
       /* include_task_info */ false,
       worker::TaskStatusEvent::TaskStateUpdate(is_debugger_paused)));
+}
+
+void CoreWorker::HandleCleanUpInActorObject(rpc::CleanUpInActorObjectRequest request,
+                                            rpc::CleanUpInActorObjectReply *reply,
+                                            rpc::SendReplyCallback send_reply_callback) {
+  ObjectID object_id = ObjectID::FromBinary(request.object_id());
+  RAY_LOG(INFO) << "HandleCleanUpInActorObject " << object_id;
+  options_.clean_up_in_actor_object_callback(object_id);
+  send_reply_callback(Status::OK(), nullptr, nullptr);
 }
 
 ClusterSizeBasedLeaseRequestRateLimiter::ClusterSizeBasedLeaseRequestRateLimiter(

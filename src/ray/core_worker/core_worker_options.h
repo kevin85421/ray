@@ -86,6 +86,7 @@ struct CoreWorkerOptions {
         raylet_ip_address(""),
         driver_name(""),
         task_execution_callback(nullptr),
+        clean_up_in_actor_object_callback(nullptr),
         check_signals(nullptr),
         initialize_thread_callback(nullptr),
         gc_collect(nullptr),
@@ -144,6 +145,8 @@ struct CoreWorkerOptions {
   std::string driver_name;
   /// Application-language worker callback to execute tasks.
   TaskExecutionCallback task_execution_callback;
+  /// Callback to clean up object in actor object store.
+  std::function<void(const ObjectID &)> clean_up_in_actor_object_callback;
   /// The callback to be called when shutting down a `CoreWorker` instance.
   std::function<void(const WorkerID &)> on_worker_shutdown;
   /// Application-language callback to check for signals that have been received

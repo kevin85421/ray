@@ -162,7 +162,7 @@ class ActorMethod:
         decorator=None,
         signature: Optional[List[inspect.Parameter]] = None,
         hardref=False,
-        tensor_transport = None,
+        tensor_transport=None,
     ):
         self._actor_ref = weakref.ref(actor)
         self._method_name = method_name
@@ -366,7 +366,7 @@ class ActorMethod:
             for arg in args:
                 if isinstance(arg, ray.ObjectRef):
                     worker = ray._private.worker.global_worker
-                    tensor_meta = worker.in_actor_object_refs.get(arg, None)
+                    tensor_meta = worker.in_actor_object_refs.get(arg.hex(), None)
                     if tensor_meta is None:
                         continue
 
@@ -374,15 +374,20 @@ class ActorMethod:
 
                     def send(self, obj_id, dst_rank):
                         import torch.distributed as dist
+
                         worker = ray._private.worker.global_worker
-                        assert obj_id in worker.in_actor_object_store, worker.in_actor_object_store
+                        assert (
+                            obj_id in worker.in_actor_object_store
+                        ), worker.in_actor_object_store
                         tensors = worker.in_actor_object_store[obj_id]
+                        print(f"send tensors: {tensors}, obj_id: {obj_id}")
                         for tensor in tensors:
                             dist.send(tensor, dst_rank)
 
                     def recv(self, obj_id, src_rank, tensor_meta):
                         import torch
                         import torch.distributed as dist
+
                         worker = ray._private.worker.global_worker
                         tensors = []
                         for meta in tensor_meta:
@@ -390,6 +395,7 @@ class ActorMethod:
                             tensor = torch.zeros(shape, dtype=dtype)
                             dist.recv(tensor, src_rank)
                             tensors.append(tensor)
+                        print(f"recv tensors: {tensors}, obj_id: {obj_id}")
                         worker.in_actor_object_store[obj_id] = tensors
 
                     from ray.experimental.channel import ChannelContext
@@ -436,7 +442,9 @@ class ActorMethod:
 
             def get_tensor_sizes(self, obj_id):
                 worker = ray._private.worker.global_worker
-                return [(t.shape, t.dtype) for t in worker.in_actor_object_store[obj_id]]
+                return [
+                    (t.shape, t.dtype) for t in worker.in_actor_object_store[obj_id]
+                ]
 
             actor = self._actor_hard_ref or self._actor_ref()
             tensor_meta = actor.__ray_call__.remote(get_tensor_sizes, obj_ref.hex())
@@ -444,7 +452,10 @@ class ActorMethod:
             # Driver will provide the NCCL metadata upon submission of a
             # dependent task.
             worker = ray._private.worker.global_worker
-            worker.in_actor_object_refs[obj_ref] = (self._actor_ref(), tensor_meta)
+            worker.in_actor_object_refs[obj_ref.hex()] = (
+                self._actor_ref(),
+                tensor_meta,
+            )
 
         return obj_ref
 

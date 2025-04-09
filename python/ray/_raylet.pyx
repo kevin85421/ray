@@ -2252,6 +2252,14 @@ cdef execute_task_with_cancellation_handler(
                 f"Exited because worker reached max_calls={execution_info.max_calls}"
                 " for this method.")
 
+cdef void clean_up_in_actor_object_callback(const CObjectID &c_object_id) nogil:
+    with gil:
+        object_id = ObjectRef(c_object_id.Binary()).hex()
+        in_actor_object_store = ray._private.worker.global_worker.in_actor_object_store
+        if object_id in in_actor_object_store:
+            print(f"clean_up_in_actor_object_callback, object_id: {object_id}, in_actor_object_store: {in_actor_object_store}")
+            del in_actor_object_store[object_id]
+
 cdef shared_ptr[LocalMemoryBuffer] ray_error_to_memory_buf(ray_error):
     cdef bytes py_bytes = ray_error.to_bytes()
     return make_shared[LocalMemoryBuffer](
@@ -3013,6 +3021,7 @@ cdef class CoreWorker:
         options.driver_name = driver_name
         options.initialize_thread_callback = initialize_pygilstate_for_thread
         options.task_execution_callback = task_execution_handler
+        options.clean_up_in_actor_object_callback = clean_up_in_actor_object_callback
         options.check_signals = check_signals
         options.gc_collect = gc_collect
         options.spill_objects = spill_objects_handler

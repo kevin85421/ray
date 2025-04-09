@@ -1,12 +1,8 @@
 import ray
 import torch
-import socket
-import os
 import torch.distributed as dist
-import time
 from ray.experimental.channel.torch_tensor_type import TorchTensorType
 from ray.experimental.channel import ChannelContext
-
 
 
 # TODOs:
@@ -19,9 +15,9 @@ from ray.experimental.channel import ChannelContext
 
 WORLD_SIZE = 2
 
+
 @ray.remote
 class Actor:
-
     def register_custom_serializer(self):
         TorchTensorType().register_custom_serializer()
 
@@ -29,7 +25,9 @@ class Actor:
         return
 
     def setup(self, world_size, rank, init_method, group_name="default"):
-        dist.init_process_group(backend="gloo", world_size=world_size, rank=rank, init_method=init_method)
+        dist.init_process_group(
+            backend="gloo", world_size=world_size, rank=rank, init_method=init_method
+        )
 
     @ray.method(tensor_transport="nccl")
     def randn(self, shape):
@@ -50,6 +48,7 @@ class Actor:
         dist.recv(tensor, src_rank)
         worker.in_actor_object_store[meta.obj_id] = tensor
 
+
 if __name__ == "__main__":
     actors = [Actor.remote() for _ in range(WORLD_SIZE)]
     ray.get([a.ping.remote() for a in actors])
@@ -58,7 +57,12 @@ if __name__ == "__main__":
     # TODO: Replace with an API call that takes in a list of actors and
     # returns a handle to the group.
     init_method = "tcp://localhost:8889"
-    ray.get([actor.setup.remote(WORLD_SIZE, rank, init_method) for rank, actor in enumerate(actors)])
+    ray.get(
+        [
+            actor.setup.remote(WORLD_SIZE, rank, init_method)
+            for rank, actor in enumerate(actors)
+        ]
+    )
     actor_ids = [actor._ray_actor_id for actor in actors]
 
     # TODO(swang): Wrap actors in a Communicator interface.
@@ -69,25 +73,26 @@ if __name__ == "__main__":
     ray.get([actor.register_custom_serializer.remote() for actor in actors])
     print("Serialization done")
 
-    shape = (1, )
+    shape = (1,)
 
     ref = actors[0].randn.remote(shape)
     ref = actors[1].sum.remote(ref)
     print(ray.get(ref))
 
-    start = time.time()
-    for _ in range(10):
-        ref = actors[0].randn.remote(shape)
-        ref = actors[1].sum.remote(ref)
-        print(ray.get(ref))
-    end = time.time()
-    print((end - start) / 10)
+    # start = time.time()
+    # num_iters = 1
+    # for _ in range(num_iters):
+    #     ref = actors[0].randn.remote(shape)
+    #     ref = actors[1].sum.remote(ref)
+    #     print(ray.get(ref))
+    # end = time.time()
+    # print((end - start) / num_iters)
 
     ## After getting response from actor A, driver will now have in its local
     ## heap object store:
     ## ObjRef(xxx) -> OBJECT_IN_ACTOR, A.address
 
-    ## TODO: On task submission to actor B, driver looks up arguments to the task. 
+    ## TODO: On task submission to actor B, driver looks up arguments to the task.
     ## driver:
     ## - Driver sees that `ref` argument is on actor A.
     ## - Driver submits A.send, B.recv tasks. Include ObjRef.
@@ -97,13 +102,13 @@ if __name__ == "__main__":
     ## - Execute sum. When looking up arguments, it sees OBJECT_IN_ACTOR, so it
     ## gets the actual value from its local actor store (which we know is
     ## already there).
-    #s = ray.get(actors[1].sum.remote(ref))
-    #t = ray.get(ref)
-    #assert t.sum() == s
+    # s = ray.get(actors[1].sum.remote(ref))
+    # t = ray.get(ref)
+    # assert t.sum() == s
 
     ## Instead of calling send/recv manually, we would like to do it
     ## automatically, using the above API.
-    #actors[0].send.remote(1, ref)
-    #recved = actors[1].recv.remote(0, shape)
-    #s = ray.get(actors[1].sum.remote(recved))
-    #assert t.sum() == s
+    # actors[0].send.remote(1, ref)
+    # recved = actors[1].recv.remote(0, shape)
+    # s = ray.get(actors[1].sum.remote(recved))
+    # assert t.sum() == s

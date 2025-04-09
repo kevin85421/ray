@@ -404,6 +404,7 @@ cdef extern from "ray/core_worker/core_worker.h" nogil:
             c_bool should_retry_exceptions,
             int64_t generator_backpressure_num_objects
         ) nogil) task_execution_callback
+        (void(const CObjectID &) nogil) clean_up_in_actor_object_callback
         (void(const CWorkerID &) nogil) on_worker_shutdown
         (function[void()]() nogil) initialize_thread_callback
         (CRayStatus() nogil) check_signals
