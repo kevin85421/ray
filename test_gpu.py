@@ -34,19 +34,8 @@ class Actor:
         return torch.randn(shape)
 
     def sum(self, tensor):
-        print("SUM")
+        print("SUM", tensor)
         return tensor.sum().item()
-
-    def send(self, meta, dst_rank):
-        worker = ray._private.worker.global_worker
-        tensor = worker.in_actor_object_store[meta.obj_id]
-        dist.send(tensor, dst_rank)
-
-    def recv(self, meta, src_rank):
-        worker = ray._private.worker.global_worker
-        tensor = torch.zeros(meta.shape, dtype=meta.dtype)
-        dist.recv(tensor, src_rank)
-        worker.in_actor_object_store[meta.obj_id] = tensor
 
 
 if __name__ == "__main__":
@@ -91,24 +80,3 @@ if __name__ == "__main__":
     ## After getting response from actor A, driver will now have in its local
     ## heap object store:
     ## ObjRef(xxx) -> OBJECT_IN_ACTOR, A.address
-
-    ## TODO: On task submission to actor B, driver looks up arguments to the task.
-    ## driver:
-    ## - Driver sees that `ref` argument is on actor A.
-    ## - Driver submits A.send, B.recv tasks. Include ObjRef.
-    ## - Then, driver submits actual B.sum task.
-    ## B:
-    ## - Execute recv. B will have the tensor in its local actor store.
-    ## - Execute sum. When looking up arguments, it sees OBJECT_IN_ACTOR, so it
-    ## gets the actual value from its local actor store (which we know is
-    ## already there).
-    # s = ray.get(actors[1].sum.remote(ref))
-    # t = ray.get(ref)
-    # assert t.sum() == s
-
-    ## Instead of calling send/recv manually, we would like to do it
-    ## automatically, using the above API.
-    # actors[0].send.remote(1, ref)
-    # recved = actors[1].recv.remote(0, shape)
-    # s = ray.get(actors[1].sum.remote(recved))
-    # assert t.sum() == s
