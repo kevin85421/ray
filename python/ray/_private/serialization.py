@@ -255,11 +255,6 @@ class SerializationContext:
 
     def _deserialize_pickle5_data(self, data):
         # TODO(swang): self.get_outer_object_ref() is set to ObjectID::Nil.
-        # import traceback
-        # print("--------------------------------")
-        # print(traceback.format_stack())
-        # print("--------------------------------")
-
         worker = ray._private.worker.global_worker
         from ray.experimental.channel import ChannelContext
 
