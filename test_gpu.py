@@ -26,9 +26,6 @@ class Actor:
     def register_custom_serializer(self):
         TorchTensorType().register_custom_serializer()
 
-    def ping(self):
-        return
-
     def setup(self, world_size, rank, init_method, group_name="default"):
         dist.init_process_group(
             backend="gloo", world_size=world_size, rank=rank, init_method=init_method
@@ -47,8 +44,6 @@ class Actor:
 
 if __name__ == "__main__":
     actors = [Actor.remote() for _ in range(WORLD_SIZE)]
-    # ray.get([a.ping.remote() for a in actors])
-    # print("actors started")
 
     # TODO: Replace with an API call that takes in a list of actors and
     # returns a handle to the group.
@@ -67,23 +62,18 @@ if __name__ == "__main__":
     print("Collective group setup done")
 
     ray.get([actor.register_custom_serializer.remote() for actor in actors])
-    print("Serialization done")
+    print("Register custom serializer done")
 
     shape = (1,)
 
+    # Sender and receiver are different actors.
+    print("Sending an object consisting of a tensor between two actors")
     ref = actors[0].randn.remote(shape)
     ref = actors[1].sum.remote(ref)
     print(ray.get(ref))
 
-    # start = time.time()
-    # num_iters = 1
-    # for _ in range(num_iters):
-    #     ref = actors[0].randn.remote(shape)
-    #     ref = actors[1].sum.remote(ref)
-    #     print(ray.get(ref))
-    # end = time.time()
-    # print((end - start) / num_iters)
-
-    ## After getting response from actor A, driver will now have in its local
-    ## heap object store:
-    ## ObjRef(xxx) -> OBJECT_IN_ACTOR, A.address
+    # Sender and receiver are the same actor.
+    print("Sending an object consisting of a tensor to the same actor")
+    ref = actors[0].randn.remote(shape)
+    ref = actors[0].sum.remote(ref)
+    print(ray.get(ref))
