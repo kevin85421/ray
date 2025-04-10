@@ -198,10 +198,6 @@ class CoreWorkerClientInterface : public pubsub::SubscriberClientInterface {
       const RayletNotifyGCSRestartRequest &request,
       const ClientCallback<RayletNotifyGCSRestartReply> &callback) {}
 
-  virtual void CleanUpInActorObject(
-      const CleanUpInActorObjectRequest &request,
-      const ClientCallback<CleanUpInActorObjectReply> &callback) {}
-
   /// Returns the max acked sequence number, useful for checking on progress.
   virtual int64_t ClientProcessedUpToSeqno() { return -1; }
 
@@ -371,12 +367,6 @@ class CoreWorkerClient : public std::enable_shared_from_this<CoreWorkerClient>,
 
   VOID_RPC_CLIENT_METHOD(CoreWorkerService,
                          AssignObjectOwner,
-                         grpc_client_,
-                         /*method_timeout_ms*/ -1,
-                         override)
-
-  VOID_RPC_CLIENT_METHOD(CoreWorkerService,
-                         CleanUpInActorObject,
                          grpc_client_,
                          /*method_timeout_ms*/ -1,
                          override)

@@ -490,24 +490,6 @@ bool TaskManager::HandleTaskReturn(const ObjectID &object_id,
     }
   }
 
-  // TODO(Kai-Hsun): Currently, we register the callback for all objects.
-  // We should only register the callback for objects that are in actor object store.
-  RAY_LOG(INFO) << "[HandleTaskReturn] AddObjectOutOfScopeOrFreedCallback " << object_id;
-  reference_counter_.AddObjectOutOfScopeOrFreedCallback(
-      object_id, [this](const ObjectID &object_id) {
-        RAY_LOG(INFO) << "CleanUpInActorObject is called to notify the actor to "
-                         "clean up the object if it is in actor object store, object_id: "
-                      << object_id;
-        auto actor_id = ObjectID::ToActorID(object_id);
-        auto rpc_client = get_actor_rpc_client_callback_(actor_id);
-        auto request = rpc::CleanUpInActorObjectRequest();
-        request.set_object_id(object_id.Binary());
-        rpc_client->CleanUpInActorObject(
-            request, [](Status status, const rpc::CleanUpInActorObjectReply &reply) {
-              RAY_CHECK(status.ok());
-            });
-      });
-
   rpc::Address owner_address;
   if (reference_counter_.GetOwner(object_id, &owner_address) && !nested_refs.empty()) {
     std::vector<ObjectID> nested_ids;

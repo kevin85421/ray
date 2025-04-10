@@ -415,12 +415,6 @@ message NumPendingTasksReply {
   int64 num_pending_tasks = 1;
 }
 
-message CleanUpInActorObjectRequest {
-  bytes object_id = 1;
-}
-
-message CleanUpInActorObjectReply {}
-
 message ReportGeneratorItemReturnsRequest {
   // The intermediate return object that's dynamically
   // generated from the executor side.
@@ -522,6 +516,4 @@ service CoreWorkerService {
   rpc NumPendingTasks(NumPendingTasksRequest) returns (NumPendingTasksReply);
   rpc RegisterMutableObjectReader(RegisterMutableObjectReaderRequest)
       returns (RegisterMutableObjectReaderReply);
-  rpc CleanUpInActorObject(CleanUpInActorObjectRequest)
-      returns (CleanUpInActorObjectReply);
 }
