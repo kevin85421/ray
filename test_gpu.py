@@ -16,6 +16,11 @@ from ray.experimental.channel import ChannelContext
 WORLD_SIZE = 2
 
 
+class Wrapper:
+    def __init__(self, obj):
+        self.obj = obj
+
+
 @ray.remote
 class Actor:
     def register_custom_serializer(self):
@@ -31,17 +36,19 @@ class Actor:
 
     @ray.method(tensor_transport="nccl")
     def randn(self, shape):
-        return torch.randn(shape)
+        return Wrapper(torch.randn(shape))
 
-    def sum(self, tensor):
-        print("SUM", tensor)
-        return tensor.sum().item()
+    def sum(self, tensor_wrapper):
+        # in_actor_object_store = ray._private.worker.global_worker.in_actor_object_store
+        # print(f"in_actor_object_store: {in_actor_object_store}")
+        print("SUM", tensor_wrapper.obj)
+        return tensor_wrapper.obj.sum().item()
 
 
 if __name__ == "__main__":
     actors = [Actor.remote() for _ in range(WORLD_SIZE)]
-    ray.get([a.ping.remote() for a in actors])
-    print("actors started")
+    # ray.get([a.ping.remote() for a in actors])
+    # print("actors started")
 
     # TODO: Replace with an API call that takes in a list of actors and
     # returns a handle to the group.

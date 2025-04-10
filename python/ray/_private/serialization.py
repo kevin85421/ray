@@ -255,6 +255,11 @@ class SerializationContext:
 
     def _deserialize_pickle5_data(self, data):
         # TODO(swang): self.get_outer_object_ref() is set to ObjectID::Nil.
+        # import traceback
+        # print("--------------------------------")
+        # print(traceback.format_stack())
+        # print("--------------------------------")
+
         worker = ray._private.worker.global_worker
         from ray.experimental.channel import ChannelContext
 
@@ -582,6 +587,9 @@ class SerializationContext:
                 assert obj_id is not None
                 obj_id = obj_id.decode("ascii")
                 worker = ray._private.worker.global_worker
+                print(
+                    f"[serialize] put tensors: {tensors}, obj_id: {obj_id} to in_actor_object_store"
+                )
                 worker.in_actor_object_store[obj_id] = tensors
 
             return val

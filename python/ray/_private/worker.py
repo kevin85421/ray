@@ -444,6 +444,7 @@ class Worker:
         self.mode = None
         self.actors = {}
         self.in_actor_object_store: Dict[ObjectRef, List[torch.Tensor]] = {}
+        # TODO(Kai-Hsun): When to clean up in_actor_object_refs?
         self.in_actor_object_refs = {}
         # When the worker is constructed. Record the original value of the
         # (CUDA_VISIBLE_DEVICES, ONEAPI_DEVICE_SELECTOR, HIP_VISIBLE_DEVICES,
@@ -861,6 +862,10 @@ class Worker:
         # into pickle.loads (https://github.com/ray-project/ray/issues/16304)
         with self.function_actor_manager.lock:
             context = self.get_serialization_context()
+            # Can't clean up in_actor_object_store here:
+            # (1) object_refs: fffffffff (seems to be pass by value?) See GetAndPinArgsForExecutor.
+            # (2) This function is used by both sender / receiver. We need to avoid the in_actor_object_store
+            #     being cleaned up in the sender side here.
             return context.deserialize_objects(data_metadata_pairs, object_refs)
 
     def get_objects(

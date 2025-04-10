@@ -363,10 +363,11 @@ class ActorMethod:
             if actor is None:
                 raise RuntimeError("Lost reference to actor")
 
+            cleanup_keys = []
             for arg in args:
                 if isinstance(arg, ray.ObjectRef):
                     worker = ray._private.worker.global_worker
-                    tensor_meta = worker.in_actor_object_refs.get(arg.hex(), None)
+                    tensor_meta = worker.in_actor_object_refs.get(arg, None)
                     if tensor_meta is None:
                         continue
 
@@ -380,11 +381,19 @@ class ActorMethod:
                             obj_id in worker.in_actor_object_store
                         ), worker.in_actor_object_store
                         tensors = worker.in_actor_object_store[obj_id]
-                        print(f"send tensors: {tensors}, obj_id: {obj_id}")
+                        print(f"[send] send tensors: {tensors}, obj_id: {obj_id}")
                         for tensor in tensors:
                             dist.send(tensor, dst_rank)
+                        # TODO(Kai-Hsun): Currently, we assume that the tensors are only
+                        # sent once.
+                        print(
+                            f"[send] delete tensors from in_actor_object_store, obj_id: {obj_id}"
+                        )
+                        del worker.in_actor_object_store[obj_id]
 
                     def recv(self, obj_id, src_rank, tensor_meta):
+                        # `tensor_meta` is an object ref that points to the tensor metadata
+                        # of the tensors
                         import torch
                         import torch.distributed as dist
 
@@ -395,7 +404,9 @@ class ActorMethod:
                             tensor = torch.zeros(shape, dtype=dtype)
                             dist.recv(tensor, src_rank)
                             tensors.append(tensor)
-                        print(f"recv tensors: {tensors}, obj_id: {obj_id}")
+                        print(
+                            f"[recv] recv tensors: {tensors}, put tensors into in_actor_object_store, obj_id: {obj_id}"
+                        )
                         worker.in_actor_object_store[obj_id] = tensors
 
                     from ray.experimental.channel import ChannelContext
@@ -413,10 +424,11 @@ class ActorMethod:
                         assert dst_rank is not None
                         assert src_rank != dst_rank
 
+                    cleanup_keys.append(arg.hex())
                     src_actor.__ray_call__.remote(send, arg.hex(), dst_rank)
                     actor.__ray_call__.remote(recv, arg.hex(), src_rank, tensor_meta)
 
-            return actor._actor_method_call(
+            handle = actor._actor_method_call(
                 self._method_name,
                 args=args,
                 kwargs=kwargs,
@@ -430,6 +442,19 @@ class ActorMethod:
                 ),
                 enable_task_events=enable_task_events,
             )
+
+            def clean_up_in_actor_object_store(self, obj_id):
+                worker = ray._private.worker.global_worker
+                if obj_id in worker.in_actor_object_store:
+                    print(
+                        f"[clean_up_in_actor_object_store] clean up in_actor_object_store, obj_id: {obj_id}"
+                    )
+                    del worker.in_actor_object_store[obj_id]
+
+            # This is pretty hacky.
+            for key in cleanup_keys:
+                actor.__ray_call__.remote(clean_up_in_actor_object_store, key)
+            return handle
 
         # Apply the decorator if there is one.
         if self._decorator is not None:
@@ -452,10 +477,9 @@ class ActorMethod:
             # Driver will provide the NCCL metadata upon submission of a
             # dependent task.
             worker = ray._private.worker.global_worker
-            worker.in_actor_object_refs[obj_ref.hex()] = (
-                self._actor_ref(),
-                tensor_meta,
-            )
+            # Keep `obj_ref` in scope. If not, `send` may be called after the obj_ref
+            # is out of scope to cause error.
+            worker.in_actor_object_refs[obj_ref] = (self._actor_ref(), tensor_meta)
 
         return obj_ref
 
