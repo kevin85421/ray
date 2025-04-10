@@ -609,7 +609,6 @@ cdef VectorToObjectRefs(const c_vector[CObjectReference] &object_refs,
                         skip_adding_local_ref):
     result = []
     for i in range(object_refs.size()):
-        # print(f"[VectorToObjectRefs] object_refs[{i}]: {object_refs[i].object_id()}")
         result.append(ObjectRef(
             object_refs[i].object_id(),
             object_refs[i].owner_address().SerializeAsString(),
@@ -1847,7 +1846,6 @@ cdef void execute_task(
                     object_refs = VectorToObjectRefs(
                             c_arg_refs,
                             skip_adding_local_ref=False)
-                    # print(f"[execute_task] object_refs: {object_refs}")
                     if core_worker.current_actor_is_asyncio():
                         # We deserialize objects in event loop thread to
                         # prevent segfaults. See #7799
@@ -2321,9 +2319,6 @@ cdef CRayStatus task_execution_handler(
 
         try:
             try:
-                # print(f"task_execution_handler: {task_name}")
-                # in_actor_object_store = ray._private.worker.global_worker.in_actor_object_store
-                # print(f"in_actor_object_store: {in_actor_object_store}")
                 # Exceptions, including task cancellation, should be handled
                 # internal to this call. If it does raise an exception, that
                 # indicates that there was an internal error.

@@ -372,6 +372,10 @@ class ActorMethod:
                         continue
 
                     src_actor, tensor_meta = tensor_meta
+                    # If the sender and receiver are the same actor, there's no need to trigger
+                    # NCCL communication.
+                    if src_actor._ray_actor_id == actor._ray_actor_id:
+                        continue
 
                     def send(self, obj_id, dst_rank):
                         import torch.distributed as dist
