@@ -578,6 +578,12 @@ class SerializationContext:
                 ctx.set_use_external_transport(prev_use_external_transport)
 
             tensors, _ = ctx.reset_out_of_band_tensors([])
+            print(
+                "[serialize] unserialized value type: ",
+                type(value),
+                "tensors: ",
+                tensors,
+            )
             if tensors:
                 assert obj_id is not None
                 obj_id = obj_id.decode("ascii")

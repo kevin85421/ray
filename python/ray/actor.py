@@ -471,9 +471,16 @@ class ActorMethod:
 
             def get_tensor_sizes(self, obj_id):
                 worker = ray._private.worker.global_worker
-                return [
-                    (t.shape, t.dtype) for t in worker.in_actor_object_store[obj_id]
-                ]
+                if obj_id in worker.in_actor_object_store:
+                    return [
+                        (t.shape, t.dtype) for t in worker.in_actor_object_store[obj_id]
+                    ]
+                else:
+                    print(
+                        "[get_tensor_sizes][error] obj_id not in in_actor_object_store: ",
+                        obj_id,
+                    )
+                    return []
 
             actor = self._actor_hard_ref or self._actor_ref()
             tensor_meta = actor.__ray_call__.remote(get_tensor_sizes, obj_ref.hex())
