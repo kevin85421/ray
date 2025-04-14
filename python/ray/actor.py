@@ -378,6 +378,7 @@ class ActorMethod:
                         continue
 
                     def send(self, obj_id, dst_rank):
+                        # TODO(Kai-Hsun): Send TensorDict to the receiver
                         import torch.distributed as dist
 
                         worker = ray._private.worker.global_worker
@@ -396,6 +397,7 @@ class ActorMethod:
                         del worker.in_actor_object_store[obj_id]
 
                     def recv(self, obj_id, src_rank, tensor_meta):
+                        # TODO(Kai-Hsun): Receive TensorDict from the sender
                         # `tensor_meta` is an object ref that points to the tensor metadata
                         # of the tensors
                         import torch
@@ -477,7 +479,7 @@ class ActorMethod:
                     ]
                 else:
                     print(
-                        "[get_tensor_sizes][error] obj_id not in in_actor_object_store: ",
+                        "[get_tensor_sizes] obj_id not in in_actor_object_store: ",
                         obj_id,
                     )
                     return []

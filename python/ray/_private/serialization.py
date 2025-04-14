@@ -259,8 +259,16 @@ class SerializationContext:
         from ray.experimental.channel import ChannelContext
 
         ctx = ChannelContext.get_current().serialization_context
-        for obj_ref, tensors in worker.in_actor_object_store.items():
-            ctx.reset_out_of_band_tensors(tensors)
+        import tensordict
+
+        tensor_dict = None
+        for obj_ref, in_actor_object in worker.in_actor_object_store.items():
+            if isinstance(in_actor_object, list):
+                ctx.reset_out_of_band_tensors(in_actor_object)
+            elif isinstance(in_actor_object, tensordict.TensorDict):
+                # Hack: Assume there is only one TensorDict in the in_actor_object_store
+                assert tensor_dict is None
+                tensor_dict = in_actor_object
 
         try:
             in_band, buffers = unpack_pickle5_buffers(data)
@@ -268,6 +276,14 @@ class SerializationContext:
                 obj = pickle.loads(in_band, buffers=buffers)
             else:
                 obj = pickle.loads(in_band)
+            # Put TensorDict back to DataProto
+            for o in obj:
+                if (
+                    hasattr(o, "__class__")
+                    and o.__class__.__module__ == "verl.protocol"
+                    and o.__class__.__name__ == "DataProto"
+                ):
+                    o.batch = tensor_dict
         # cloudpickle does not provide error types
         except pickle.pickle.PicklingError:
             raise DeserializationError()
@@ -571,6 +587,16 @@ class SerializationContext:
             # decorated with tensor_transport.
             prev_use_external_transport = ctx.use_external_transport
             ctx.set_use_external_transport(True)
+            # Check if the value is a DataProto object
+            tensor_dict = None
+            if (
+                hasattr(value, "__class__")
+                and value.__class__.__module__ == "verl.protocol"
+                and value.__class__.__name__ == "DataProto"
+            ):
+                print("[serialize] Found DataProto object", type(value))
+                tensor_dict = value.batch
+                value.batch = None
 
             try:
                 val = self._serialize_to_msgpack(value)
@@ -578,19 +604,23 @@ class SerializationContext:
                 ctx.set_use_external_transport(prev_use_external_transport)
 
             tensors, _ = ctx.reset_out_of_band_tensors([])
-            print(
-                "[serialize] unserialized value type: ",
-                type(value),
-                "tensors: ",
-                tensors,
-            )
-            if tensors:
+            # print(
+            #     "[serialize] unserialized value type: ",
+            #     type(value),
+            #     "tensors: ",
+            #     tensors,
+            #     "tensor_dict: ",
+            #     tensor_dict,
+            # )
+            # assert not (tensor_dict and tensors)
+            if tensors or tensor_dict is not None:
                 assert obj_id is not None
                 obj_id = obj_id.decode("ascii")
                 worker = ray._private.worker.global_worker
                 print(
-                    f"[serialize] put tensors: {tensors}, obj_id: {obj_id} to in_actor_object_store"
+                    f"[serialize] put tensors: {tensors} or tensor_dict: {tensor_dict}, obj_id: {obj_id} to in_actor_object_store"
                 )
-                worker.in_actor_object_store[obj_id] = tensors
+                data = tensors if tensors else tensor_dict
+                worker.in_actor_object_store[obj_id] = data
 
             return val
