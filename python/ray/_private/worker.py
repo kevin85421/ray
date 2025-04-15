@@ -36,7 +36,7 @@ from urllib.parse import urlparse
 import colorama
 import setproctitle
 
-from typing import Literal, Protocol
+from typing import Literal, Protocol, TYPE_CHECKING
 
 import ray
 import ray._private.worker
@@ -94,6 +94,9 @@ from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.tracing.tracing_helper import _import_from_string
 from ray.widgets import Template
 from ray.widgets.util import repr_with_fallback
+
+if TYPE_CHECKING:
+    import torch
 
 SCRIPT_MODE = 0
 WORKER_MODE = 1
@@ -440,6 +443,9 @@ class Worker:
         self.node = None
         self.mode = None
         self.actors = {}
+        self.in_actor_object_store: Dict[ObjectRef, List[torch.Tensor]] = {}
+        # TODO(Kai-Hsun): When to clean up in_actor_object_refs?
+        self.in_actor_object_refs = {}
         # When the worker is constructed. Record the original value of the
         # (CUDA_VISIBLE_DEVICES, ONEAPI_DEVICE_SELECTOR, HIP_VISIBLE_DEVICES,
         # NEURON_RT_VISIBLE_CORES, TPU_VISIBLE_CHIPS, ..) environment variables.
@@ -856,6 +862,10 @@ class Worker:
         # into pickle.loads (https://github.com/ray-project/ray/issues/16304)
         with self.function_actor_manager.lock:
             context = self.get_serialization_context()
+            # Can't clean up in_actor_object_store here:
+            # (1) object_refs: fffffffff (seems to be pass by value?) See GetAndPinArgsForExecutor.
+            # (2) This function is used by both sender / receiver. We need to avoid the in_actor_object_store
+            #     being cleaned up in the sender side here.
             return context.deserialize_objects(data_metadata_pairs, object_refs)
 
     def get_objects(

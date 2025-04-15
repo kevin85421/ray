@@ -254,15 +254,41 @@ class SerializationContext:
                 )
 
     def _deserialize_pickle5_data(self, data):
+        # TODO(swang): self.get_outer_object_ref() is set to ObjectID::Nil.
+        worker = ray._private.worker.global_worker
+        from ray.experimental.channel import ChannelContext
+
+        ctx = ChannelContext.get_current().serialization_context
+        import tensordict
+
+        tensor_dict = None
+        for obj_ref, in_actor_object in worker.in_actor_object_store.items():
+            if isinstance(in_actor_object, list):
+                ctx.reset_out_of_band_tensors(in_actor_object)
+            elif isinstance(in_actor_object, tensordict.TensorDict):
+                # Hack: Assume there is only one TensorDict in the in_actor_object_store
+                assert tensor_dict is None
+                tensor_dict = in_actor_object
+
         try:
             in_band, buffers = unpack_pickle5_buffers(data)
             if len(buffers) > 0:
                 obj = pickle.loads(in_band, buffers=buffers)
             else:
                 obj = pickle.loads(in_band)
+            # Put TensorDict back to DataProto
+            for o in obj:
+                if (
+                    hasattr(o, "__class__")
+                    and o.__class__.__module__ == "verl.protocol"
+                    and o.__class__.__name__ == "DataProto"
+                ):
+                    o.batch = tensor_dict
         # cloudpickle does not provide error types
         except pickle.pickle.PicklingError:
             raise DeserializationError()
+        finally:
+            ctx.reset_out_of_band_tensors([])
         return obj
 
     def _deserialize_msgpack_data(self, data, metadata_fields):
@@ -541,7 +567,7 @@ class SerializationContext:
             metadata, msgpack_data, contained_object_refs, pickle5_serialized_object
         )
 
-    def serialize(self, value):
+    def serialize(self, value, obj_id=None):
         """Serialize an object.
 
         Args:
@@ -553,4 +579,48 @@ class SerializationContext:
             # that this object can also be read by Java.
             return RawSerializedObject(value)
         else:
-            return self._serialize_to_msgpack(value)
+            from ray.experimental.channel import ChannelContext
+
+            ctx = ChannelContext.get_current().serialization_context
+            # TODO(swang): Only set the external transport flag if
+            # this is the output of an actor method that was
+            # decorated with tensor_transport.
+            prev_use_external_transport = ctx.use_external_transport
+            ctx.set_use_external_transport(True)
+            # Check if the value is a DataProto object
+            tensor_dict = None
+            if (
+                hasattr(value, "__class__")
+                and value.__class__.__module__ == "verl.protocol"
+                and value.__class__.__name__ == "DataProto"
+            ):
+                print("[serialize] Found DataProto object", type(value))
+                tensor_dict = value.batch
+                value.batch = None
+
+            try:
+                val = self._serialize_to_msgpack(value)
+            finally:
+                ctx.set_use_external_transport(prev_use_external_transport)
+
+            tensors, _ = ctx.reset_out_of_band_tensors([])
+            # print(
+            #     "[serialize] unserialized value type: ",
+            #     type(value),
+            #     "tensors: ",
+            #     tensors,
+            #     "tensor_dict: ",
+            #     tensor_dict,
+            # )
+            # assert not (tensor_dict and tensors)
+            if tensors or tensor_dict is not None:
+                assert obj_id is not None
+                obj_id = obj_id.decode("ascii")
+                worker = ray._private.worker.global_worker
+                print(
+                    f"[serialize] put tensors: {tensors} or tensor_dict: {tensor_dict}, obj_id: {obj_id} to in_actor_object_store"
+                )
+                data = tensors if tensors else tensor_dict
+                worker.in_actor_object_store[obj_id] = data
+
+            return val
