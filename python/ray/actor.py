@@ -363,7 +363,6 @@ class ActorMethod:
             if actor is None:
                 raise RuntimeError("Lost reference to actor")
 
-            cleanup_keys = []
             for arg in args:
                 if isinstance(arg, ray.ObjectRef):
                     worker = ray._private.worker.global_worker
@@ -430,7 +429,6 @@ class ActorMethod:
                         assert dst_rank is not None
                         assert src_rank != dst_rank
 
-                    cleanup_keys.append(arg.hex())
                     src_actor.__ray_call__.remote(send, arg.hex(), dst_rank)
                     actor.__ray_call__.remote(recv, arg.hex(), src_rank, tensor_meta)
 
@@ -449,17 +447,6 @@ class ActorMethod:
                 enable_task_events=enable_task_events,
             )
 
-            def clean_up_in_actor_object_store(self, obj_id):
-                worker = ray._private.worker.global_worker
-                if obj_id in worker.in_actor_object_store:
-                    print(
-                        f"[clean_up_in_actor_object_store] clean up in_actor_object_store, obj_id: {obj_id}"
-                    )
-                    del worker.in_actor_object_store[obj_id]
-
-            # This is pretty hacky.
-            for key in cleanup_keys:
-                actor.__ray_call__.remote(clean_up_in_actor_object_store, key)
             return handle
 
         # Apply the decorator if there is one.
@@ -467,6 +454,7 @@ class ActorMethod:
             invocation = self._decorator(invocation)
 
         obj_ref = invocation(args, kwargs)
+        worker = ray._private.worker.global_worker
         if tensor_transport is not None:
             assert tensor_transport == "nccl"
             assert num_returns == 1
@@ -489,10 +477,13 @@ class ActorMethod:
             # Metadata: (actor that hosts the object, tensor shapes)
             # Driver will provide the NCCL metadata upon submission of a
             # dependent task.
-            worker = ray._private.worker.global_worker
             # Keep `obj_ref` in scope. If not, `send` may be called after the obj_ref
             # is out of scope to cause error.
             worker.in_actor_object_refs[obj_ref] = (self._actor_ref(), tensor_meta)
+        else:
+            # When driver tries to materialize DataProto, it needs to use the actor
+            # handle to retrieve the TensorDict from the actor's object store.
+            worker.in_actor_object_refs[obj_ref] = (self._actor_ref(), None)
 
         return obj_ref
 
@@ -1644,6 +1635,7 @@ class ActorHandle:
         if generator_backpressure_num_objects is None:
             generator_backpressure_num_objects = -1
 
+        print("[debug] _actor_method_call", "method_name: ", method_name)
         object_refs = worker.core_worker.submit_actor_task(
             self._ray_actor_language,
             self._ray_actor_id,
@@ -1659,6 +1651,7 @@ class ActorHandle:
             generator_backpressure_num_objects,
             enable_task_events,
         )
+        print("[debug] object_refs: ", object_refs)
 
         if num_returns == STREAMING_GENERATOR_RETURN:
             # Streaming generator will return a single ref

@@ -253,7 +253,7 @@ class SerializationContext:
                     object_ref
                 )
 
-    def _deserialize_pickle5_data(self, data):
+    def _deserialize_pickle5_data(self, data, object_ref=None):
         # TODO(swang): self.get_outer_object_ref() is set to ObjectID::Nil.
         worker = ray._private.worker.global_worker
         from ray.experimental.channel import ChannelContext
@@ -265,10 +265,6 @@ class SerializationContext:
         for obj_ref, in_actor_object in worker.in_actor_object_store.items():
             if isinstance(in_actor_object, list):
                 ctx.reset_out_of_band_tensors(in_actor_object)
-            elif isinstance(in_actor_object, tensordict.TensorDict):
-                # Hack: Assume there is only one TensorDict in the in_actor_object_store
-                assert tensor_dict is None
-                tensor_dict = in_actor_object
 
         try:
             in_band, buffers = unpack_pickle5_buffers(data)
@@ -283,7 +279,48 @@ class SerializationContext:
                     and o.__class__.__module__ == "verl.protocol"
                     and o.__class__.__name__ == "DataProto"
                 ):
-                    o.batch = tensor_dict
+                    if o.batch is None:
+                        print(
+                            "[deserialize_pickle5_data] Found DataProto object", type(o)
+                        )
+                        tensor_dict = None
+                        actor_id = ray.get_runtime_context().get_actor_id()
+                        if (
+                            self.worker.mode != ray._private.worker.WORKER_MODE
+                            or actor_id is None
+                        ):
+                            # TODO: retrieve tensor dict from actor via shared memory
+                            if object_ref is not None:
+
+                                def retrieve_from_actor(self, obj_id):
+                                    print(
+                                        "[retrieve_from_actor] retrieve tensor dict from actor via shared memory",
+                                        obj_id,
+                                    )
+                                    worker = ray._private.worker.global_worker
+                                    tensor_dict = worker.in_actor_object_store[obj_id]
+                                    del worker.in_actor_object_store[obj_id]
+                                    return tensor_dict
+
+                                actor_handle, _ = worker.in_actor_object_refs[
+                                    object_ref
+                                ]
+                                tensor_dict = ray.get(
+                                    actor_handle.__ray_call__.remote(
+                                        retrieve_from_actor, object_ref.hex()
+                                    )
+                                )
+                        else:
+                            obj_id = o.meta_info["obj_id"]
+                            assert (
+                                obj_id in worker.in_actor_object_store
+                            ), "obj_id should be in worker.in_actor_object_store"
+                            tensor_dict = worker.in_actor_object_store[obj_id]
+                            del worker.in_actor_object_store[obj_id]
+                            assert isinstance(
+                                tensor_dict, tensordict.TensorDict
+                            ), "tensor_dict should be a TensorDict"
+                        o.batch = tensor_dict
         # cloudpickle does not provide error types
         except pickle.pickle.PicklingError:
             raise DeserializationError()
@@ -291,11 +328,11 @@ class SerializationContext:
             ctx.reset_out_of_band_tensors([])
         return obj
 
-    def _deserialize_msgpack_data(self, data, metadata_fields):
+    def _deserialize_msgpack_data(self, data, metadata_fields, object_ref=None):
         msgpack_data, pickle5_data = split_buffer(data)
 
         if metadata_fields[0] == ray_constants.OBJECT_METADATA_TYPE_PYTHON:
-            python_objects = self._deserialize_pickle5_data(pickle5_data)
+            python_objects = self._deserialize_pickle5_data(pickle5_data, object_ref)
         else:
             python_objects = []
 
@@ -340,14 +377,14 @@ class SerializationContext:
                 ray_constants.OBJECT_METADATA_TYPE_CROSS_LANGUAGE,
                 ray_constants.OBJECT_METADATA_TYPE_PYTHON,
             ]:
-                return self._deserialize_msgpack_data(data, metadata_fields)
+                return self._deserialize_msgpack_data(data, metadata_fields, object_ref)
             # Check if the object should be returned as raw bytes.
             if metadata_fields[0] == ray_constants.OBJECT_METADATA_TYPE_RAW:
                 if data is None:
                     return b""
                 return data.to_pybytes()
             elif metadata_fields[0] == ray_constants.OBJECT_METADATA_TYPE_ACTOR_HANDLE:
-                obj = self._deserialize_msgpack_data(data, metadata_fields)
+                obj = self._deserialize_msgpack_data(data, metadata_fields, object_ref)
                 # The last character is a 1 if weak_ref=True and 0 else.
                 serialized, weak_ref = obj[:-1], obj[-1:] == b"1"
                 return _actor_handle_deserializer(serialized, weak_ref)
@@ -364,7 +401,7 @@ class SerializationContext:
             # TODO (kfstorm): exception serialization should be language
             # independent.
             if error_type == ErrorType.Value("TASK_EXECUTION_EXCEPTION"):
-                obj = self._deserialize_msgpack_data(data, metadata_fields)
+                obj = self._deserialize_msgpack_data(data, metadata_fields, object_ref)
                 return RayError.from_bytes(obj)
             elif error_type == ErrorType.Value("WORKER_DIED"):
                 return WorkerCrashedError()
@@ -387,7 +424,9 @@ class SerializationContext:
                 except google.protobuf.message.DecodeError:
                     # Deserialization from Python. The TaskCancelledError is
                     # serialized and returned directly.
-                    obj = self._deserialize_msgpack_data(data, metadata_fields)
+                    obj = self._deserialize_msgpack_data(
+                        data, metadata_fields, object_ref
+                    )
                     return RayError.from_bytes(obj)
             elif error_type == ErrorType.Value("OBJECT_LOST"):
                 return ObjectLostError(
@@ -579,6 +618,15 @@ class SerializationContext:
             # that this object can also be read by Java.
             return RawSerializedObject(value)
         else:
+            if self.worker.mode != ray._private.worker.WORKER_MODE:
+                # Driver process. => obj_id is None
+                print("[serialize] driver process, serialize to msgpack", type(value))
+                return self._serialize_to_msgpack(value)
+            actor_id = ray.get_runtime_context().get_actor_id()
+            if actor_id is None:
+                print("[serialize] Ray task, serialize to msgpack", type(value))
+                return self._serialize_to_msgpack(value)
+
             from ray.experimental.channel import ChannelContext
 
             ctx = ChannelContext.get_current().serialization_context
@@ -594,9 +642,13 @@ class SerializationContext:
                 and value.__class__.__module__ == "verl.protocol"
                 and value.__class__.__name__ == "DataProto"
             ):
-                print("[serialize] Found DataProto object", type(value))
+                print(
+                    "[serialize] Found DataProto object", type(value), "obj_id", obj_id
+                )
                 tensor_dict = value.batch
                 value.batch = None
+                value.meta_info["obj_id"] = obj_id.decode("ascii")
+                assert obj_id is not None, "obj_id should not be None"
 
             try:
                 val = self._serialize_to_msgpack(value)
@@ -611,10 +663,12 @@ class SerializationContext:
             #     tensors,
             #     "tensor_dict: ",
             #     tensor_dict,
+            #     "obj_id: ",
+            #     obj_id,
             # )
             # assert not (tensor_dict and tensors)
             if tensors or tensor_dict is not None:
-                assert obj_id is not None
+                assert obj_id is not None, "obj_id is None"
                 obj_id = obj_id.decode("ascii")
                 worker = ray._private.worker.global_worker
                 print(

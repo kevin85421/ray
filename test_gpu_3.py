@@ -10,10 +10,10 @@ def create_sample_dataproto(batch_size=8):
     """
     Creates a sample DataProto object with exactly the specified batch size
     """
-    seq_length = 128
+    seq_length = 2
 
     # Common inputs for language models
-    input_ids = torch.randint(0, 50000, (batch_size, seq_length))
+    input_ids = torch.randint(0, 5, (batch_size, seq_length))
     attention_mask = torch.ones((batch_size, seq_length), dtype=torch.long)
     position_ids = torch.arange(0, seq_length).unsqueeze(0).expand(batch_size, -1)
 
@@ -48,9 +48,8 @@ class Actor:
         )
 
     @ray.method(tensor_transport="nccl")
-    def send_data_proto(self, batch_size):
-        data_proto = create_sample_dataproto(batch_size)
-        print("batch", type(data_proto.batch.get("attention_mask")))
+    def send_data_proto(self, data_proto):
+        print("send_data_proto", data_proto)
         return data_proto
 
     def recv_data_proto(self, data_proto):
@@ -81,14 +80,16 @@ if __name__ == "__main__":
     ctx.communicators[0] = actors
     print("Collective group setup done")
 
-    ray.get([actor.register_custom_serializer.remote() for actor in actors])
-    print("Register custom serializer done")
+    # ray.get([actor.register_custom_serializer.remote() for actor in actors])
+    # print("Register custom serializer done")
 
     shape = (1,)
 
     batch_size = 3
     print("Sending an object consisting of a tensor to the same actor")
-    ref = actors[0].send_data_proto.remote(batch_size)
+    data_proto = create_sample_dataproto(batch_size)
+    print("driver creates data_proto", data_proto)
+
+    ref = actors[0].send_data_proto.remote(data_proto)
     ref = actors[0].recv_data_proto.remote(ref)
-    # Error
-    print(ray.get(ref))
+    print("driver gets data_proto", ray.get(ref))
