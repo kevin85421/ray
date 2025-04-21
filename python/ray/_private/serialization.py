@@ -293,30 +293,38 @@ class SerializationContext:
                             if object_ref is not None:
 
                                 def retrieve_from_actor(self, obj_id):
+                                    worker = ray._private.worker.global_worker
                                     print(
                                         "[retrieve_from_actor] retrieve tensor dict from actor via shared memory",
                                         obj_id,
+                                        worker.in_actor_object_store,
                                     )
-                                    worker = ray._private.worker.global_worker
                                     tensor_dict = worker.in_actor_object_store[obj_id]
-                                    del worker.in_actor_object_store[obj_id]
+                                    # print("[retrieve_from_actor] remove tensor dict from in_actor_object_store 1, obj_id", obj_id)
+                                    # del worker.in_actor_object_store[obj_id]
                                     return tensor_dict
 
-                                actor_handle, _ = worker.in_actor_object_refs[
-                                    object_ref
-                                ]
-                                tensor_dict = ray.get(
-                                    actor_handle.__ray_call__.remote(
-                                        retrieve_from_actor, object_ref.hex()
+                                data_proto_obj_id = o.meta_info.get("obj_id", None)
+                                if data_proto_obj_id is not None:
+                                    assert data_proto_obj_id == object_ref.hex()
+                                    actor_handle, _ = worker.in_actor_object_refs[
+                                        object_ref
+                                    ]
+                                    tensor_dict = ray.get(
+                                        actor_handle.__ray_call__.remote(
+                                            retrieve_from_actor, data_proto_obj_id
+                                        )
                                     )
-                                )
                         else:
                             obj_id = o.meta_info["obj_id"]
+                            # TODO: when will `obj_id` not in `worker.in_actor_object_store`?
                             assert (
                                 obj_id in worker.in_actor_object_store
-                            ), "obj_id should be in worker.in_actor_object_store"
+                            ), f"obj_id {obj_id} should be in worker.in_actor_object_store"
                             tensor_dict = worker.in_actor_object_store[obj_id]
-                            del worker.in_actor_object_store[obj_id]
+                            # In veRL, a single DataProto object is consumed multiple times.
+                            # print("[deserialize_pickle5_data] remove tensor dict from in_actor_object_store 2, obj_id", obj_id)
+                            # del worker.in_actor_object_store[obj_id]
                             assert isinstance(
                                 tensor_dict, tensordict.TensorDict
                             ), "tensor_dict should be a TensorDict"
@@ -637,15 +645,22 @@ class SerializationContext:
             ctx.set_use_external_transport(True)
             # Check if the value is a DataProto object
             tensor_dict = None
+            tensor_dict_set = False
             if (
                 hasattr(value, "__class__")
                 and value.__class__.__module__ == "verl.protocol"
                 and value.__class__.__name__ == "DataProto"
             ):
                 print(
-                    "[serialize] Found DataProto object", type(value), "obj_id", obj_id
+                    "[serialize] Found DataProto object",
+                    type(value),
+                    "obj_id",
+                    obj_id,
+                    "batch",
+                    value.batch is None,
                 )
                 tensor_dict = value.batch
+                tensor_dict_set = True
                 value.batch = None
                 value.meta_info["obj_id"] = obj_id.decode("ascii")
                 assert obj_id is not None, "obj_id should not be None"
@@ -667,7 +682,9 @@ class SerializationContext:
             #     obj_id,
             # )
             # assert not (tensor_dict and tensors)
-            if tensors or tensor_dict is not None:
+            if tensors or tensor_dict_set:
+                # We still need to store None in the in_actor_object_store if `tensor_dict_set` is True.
+                # This avoids the KeyError when looking up the object in the in_actor_object_store.
                 assert obj_id is not None, "obj_id is None"
                 obj_id = obj_id.decode("ascii")
                 worker = ray._private.worker.global_worker
