@@ -296,8 +296,8 @@ class SerializationContext:
                                     worker = ray._private.worker.global_worker
                                     print(
                                         "[retrieve_from_actor] retrieve tensor dict from actor via shared memory",
+                                        "obj_id",
                                         obj_id,
-                                        worker.in_actor_object_store,
                                     )
                                     tensor_dict = worker.in_actor_object_store[obj_id]
                                     # print("[retrieve_from_actor] remove tensor dict from in_actor_object_store 1, obj_id", obj_id)
