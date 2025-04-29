@@ -720,13 +720,8 @@ CoreWorker::CoreWorker(CoreWorkerOptions options, const WorkerID &worker_id)
         RAY_CHECK_OK(PutInLocalPlasmaStore(object, object_id, /*pin_object=*/true));
       },
       /* retry_task_callback= */
-      [this](TaskEntry &task_entry, bool object_recovery, uint32_t delay_ms) {
-        auto spec = task_entry.spec;
+      [this](TaskSpecification &spec, bool object_recovery, uint32_t delay_ms) {
         spec.GetMutableMessage().set_attempt_number(spec.AttemptNumber() + 1);
-        task_manager_->SetTaskStatus(task_entry,
-                                     rpc::TaskStatus::PENDING_ARGS_AVAIL,
-                                     /* state_update */ std::nullopt,
-                                     /* include_task_info */ true);
         if (!object_recovery) {
           // Retry after a delay to emulate the existing Raylet reconstruction
           // behaviour. TODO(ekl) backoff exponentially.

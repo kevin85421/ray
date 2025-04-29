@@ -45,13 +45,11 @@ class TaskResubmissionInterface {
   virtual ~TaskResubmissionInterface() = default;
 };
 
-struct TaskEntry;
-
 using TaskStatusCounter = CounterMap<std::tuple<std::string, rpc::TaskStatus, bool>>;
 using PutInLocalPlasmaCallback =
     std::function<void(const RayObject &object, const ObjectID &object_id)>;
 using RetryTaskCallback =
-    std::function<void(TaskEntry &task_entry, bool object_recovery, uint32_t delay_ms)>;
+    std::function<void(TaskSpecification &spec, bool object_recovery, uint32_t delay_ms)>;
 using ReconstructObjectCallback = std::function<void(const ObjectID &object_id)>;
 using PushErrorCallback = std::function<Status(const JobID &job_id,
                                                const std::string &type,
@@ -172,104 +170,6 @@ class ObjectRefStream {
   int64_t total_num_object_written_{};
   /// The total number of the objects that are consumed from stream.
   int64_t total_num_object_consumed_{};
-};
-
-struct TaskEntry {
-  TaskEntry(TaskSpecification spec_arg,
-            int num_retries_left_arg,
-            size_t num_returns,
-            TaskStatusCounter &counter,
-            int64_t num_oom_retries_left)
-      : spec(std::move(spec_arg)),
-        num_retries_left(num_retries_left_arg),
-        counter(&counter),
-        num_oom_retries_left(num_oom_retries_left) {
-    reconstructable_return_ids.reserve(num_returns);
-    for (size_t i = 0; i < num_returns; i++) {
-      reconstructable_return_ids.insert(spec.ReturnId(i));
-    }
-    status = std::make_tuple(spec.GetName(), rpc::TaskStatus::PENDING_ARGS_AVAIL, false);
-    counter.Increment(status);
-  }
-
-  void SetStatus(rpc::TaskStatus new_status) {
-    auto new_tuple = std::make_tuple(spec.GetName(), new_status, is_retry_);
-    if (IsPending()) {
-      counter->Swap(status, new_tuple);
-    } else {
-      // FINISHED and FAILED are monotonically increasing.
-      // TODO(jjyao): We should use Counter instead of Gauge
-      // for FINISHED and FAILED tasks.
-      counter->Increment(new_tuple);
-    }
-    status = std::move(new_tuple);
-  }
-
-  void MarkRetry() { is_retry_ = true; }
-
-  rpc::TaskStatus GetStatus() const { return std::get<1>(status); }
-
-  // Get the NodeID where the task is executed.
-  NodeID GetNodeId() const { return node_id_; }
-  // Set the NodeID where the task is executed.
-  void SetNodeId(const NodeID &node_id) { node_id_ = node_id; }
-
-  bool IsPending() const {
-    return GetStatus() != rpc::TaskStatus::FINISHED &&
-           GetStatus() != rpc::TaskStatus::FAILED;
-  }
-
-  bool IsWaitingForExecution() const {
-    return GetStatus() == rpc::TaskStatus::SUBMITTED_TO_WORKER;
-  }
-
-  /// The task spec. This is pinned as long as the following are true:
-  /// - The task is still pending execution. This means that the task may
-  /// fail and so it may be retried in the future.
-  /// - The task finished execution, but it has num_retries_left > 0 and
-  /// reconstructable_return_ids is not empty. This means that the task may
-  /// be retried in the future to recreate its return objects.
-  /// TODO(swang): The TaskSpec protobuf must be copied into the
-  /// PushTaskRequest protobuf when sent to a worker so that we can retry it if
-  /// the worker fails. We could avoid this by either not caching the full
-  /// TaskSpec for tasks that cannot be retried (e.g., actor tasks), or by
-  /// storing a shared_ptr to a PushTaskRequest protobuf for all tasks.
-  TaskSpecification spec;
-  // Number of times this task may be resubmitted. If this reaches 0, then
-  // the task entry may be erased.
-  int32_t num_retries_left;
-  // Reference to the task stats tracker.
-  TaskStatusCounter *counter;
-  // Number of times this task may be resubmitted if the task failed
-  // due to out of memory failure.
-  int32_t num_oom_retries_left;
-  // Objects returned by this task that are reconstructable. This is set
-
-  // objects may be reconstructed by resubmitting the task. Once the task
-  // finishes its first execution, then the objects that the task returned by
-  // value are removed from this set because they can be inlined in any
-  // dependent tasks. Objects that the task returned through plasma are
-  // reconstructable, so they are only removed from this set once:
-  // 1) The language frontend no longer has a reference to the object ID.
-  // 2) There are no tasks that depend on the object. This includes both
-  //    pending tasks and tasks that finished execution but that may be
-  //    retried in the future.
-  absl::flat_hash_set<ObjectID> reconstructable_return_ids;
-  // The size of this (serialized) task spec in bytes, if the task spec is
-  // not pending, i.e. it is being pinned because it's in another object's
-  // lineage. We cache this because the task spec protobuf can mutate
-  // out-of-band.
-  int64_t lineage_footprint_bytes = 0;
-  // Number of times this task successfully completed execution so far.
-  int num_successful_executions = 0;
-
- private:
-  // The task's current execution and metric status (name, status, is_retry).
-  std::tuple<std::string, rpc::TaskStatus, bool> status;
-  // The node id where task is executed.
-  NodeID node_id_;
-  // Whether this is a task retry due to task failure.
-  bool is_retry_ = false;
 };
 
 class TaskManager : public TaskFinisherInterface, public TaskResubmissionInterface {
@@ -678,27 +578,106 @@ class TaskManager : public TaskFinisherInterface, public TaskResubmissionInterfa
   /// Record OCL metrics.
   void RecordMetrics();
 
-  /// Set the TaskStatus
-  ///
-  /// Sets the task status on the TaskEntry, and record the task status change events in
-  /// the TaskEventBuffer if enabled.
-  ///
-  /// \param task_entry corresponding TaskEntry of a task to record the event.
-  /// \param status new status.
-  /// \param state_update The state update for the task status change event.
-  /// \param include_task_info Whether to include task info in the task status change
-  /// event.
-  /// \param attempt_number The attempt number to record the task status change
-  /// event. If not specified, the attempt number will be the current attempt number of
-  /// the task.
-  void SetTaskStatus(
-      TaskEntry &task_entry,
-      rpc::TaskStatus status,
-      std::optional<worker::TaskStatusEvent::TaskStateUpdate> state_update = std::nullopt,
-      bool include_task_info = false,
-      std::optional<int32_t> attempt_number = std::nullopt);
-
  private:
+  struct TaskEntry {
+    TaskEntry(TaskSpecification spec_arg,
+              int num_retries_left_arg,
+              size_t num_returns,
+              TaskStatusCounter &counter,
+              int64_t num_oom_retries_left)
+        : spec(std::move(spec_arg)),
+          num_retries_left(num_retries_left_arg),
+          counter(&counter),
+          num_oom_retries_left(num_oom_retries_left) {
+      reconstructable_return_ids.reserve(num_returns);
+      for (size_t i = 0; i < num_returns; i++) {
+        reconstructable_return_ids.insert(spec.ReturnId(i));
+      }
+      status =
+          std::make_tuple(spec.GetName(), rpc::TaskStatus::PENDING_ARGS_AVAIL, false);
+      counter.Increment(status);
+    }
+
+    void SetStatus(rpc::TaskStatus new_status) {
+      auto new_tuple = std::make_tuple(spec.GetName(), new_status, is_retry_);
+      if (IsPending()) {
+        counter->Swap(status, new_tuple);
+      } else {
+        // FINISHED and FAILED are monotonically increasing.
+        // TODO(jjyao): We should use Counter instead of Gauge
+        // for FINISHED and FAILED tasks.
+        counter->Increment(new_tuple);
+      }
+      status = std::move(new_tuple);
+    }
+
+    void MarkRetry() { is_retry_ = true; }
+
+    rpc::TaskStatus GetStatus() const { return std::get<1>(status); }
+
+    // Get the NodeID where the task is executed.
+    NodeID GetNodeId() const { return node_id_; }
+    // Set the NodeID where the task is executed.
+    void SetNodeId(const NodeID &node_id) { node_id_ = node_id; }
+
+    bool IsPending() const {
+      return GetStatus() != rpc::TaskStatus::FINISHED &&
+             GetStatus() != rpc::TaskStatus::FAILED;
+    }
+
+    bool IsWaitingForExecution() const {
+      return GetStatus() == rpc::TaskStatus::SUBMITTED_TO_WORKER;
+    }
+
+    /// The task spec. This is pinned as long as the following are true:
+    /// - The task is still pending execution. This means that the task may
+    /// fail and so it may be retried in the future.
+    /// - The task finished execution, but it has num_retries_left > 0 and
+    /// reconstructable_return_ids is not empty. This means that the task may
+    /// be retried in the future to recreate its return objects.
+    /// TODO(swang): The TaskSpec protobuf must be copied into the
+    /// PushTaskRequest protobuf when sent to a worker so that we can retry it if
+    /// the worker fails. We could avoid this by either not caching the full
+    /// TaskSpec for tasks that cannot be retried (e.g., actor tasks), or by
+    /// storing a shared_ptr to a PushTaskRequest protobuf for all tasks.
+    TaskSpecification spec;
+    // Number of times this task may be resubmitted. If this reaches 0, then
+    // the task entry may be erased.
+    int32_t num_retries_left;
+    // Reference to the task stats tracker.
+    TaskStatusCounter *counter;
+    // Number of times this task may be resubmitted if the task failed
+    // due to out of memory failure.
+    int32_t num_oom_retries_left;
+    // Objects returned by this task that are reconstructable. This is set
+
+    // objects may be reconstructed by resubmitting the task. Once the task
+    // finishes its first execution, then the objects that the task returned by
+    // value are removed from this set because they can be inlined in any
+    // dependent tasks. Objects that the task returned through plasma are
+    // reconstructable, so they are only removed from this set once:
+    // 1) The language frontend no longer has a reference to the object ID.
+    // 2) There are no tasks that depend on the object. This includes both
+    //    pending tasks and tasks that finished execution but that may be
+    //    retried in the future.
+    absl::flat_hash_set<ObjectID> reconstructable_return_ids;
+    // The size of this (serialized) task spec in bytes, if the task spec is
+    // not pending, i.e. it is being pinned because it's in another object's
+    // lineage. We cache this because the task spec protobuf can mutate
+    // out-of-band.
+    int64_t lineage_footprint_bytes = 0;
+    // Number of times this task successfully completed execution so far.
+    int num_successful_executions = 0;
+
+   private:
+    // The task's current execution and metric status (name, status, is_retry).
+    std::tuple<std::string, rpc::TaskStatus, bool> status;
+    // The node id where task is executed.
+    NodeID node_id_;
+    // Whether this is a task retry due to task failure.
+    bool is_retry_ = false;
+  };
+
   /// Update nested ref count info and store the in-memory value for a task's
   /// return object. Returns true if the task's return object was returned
   /// directly by value.
@@ -747,6 +726,26 @@ class TaskManager : public TaskFinisherInterface, public TaskResubmissionInterfa
 
   /// Shutdown if all tasks are finished and shutdown is scheduled.
   void ShutdownIfNeeded() ABSL_LOCKS_EXCLUDED(mu_);
+
+  /// Set the TaskStatus
+  ///
+  /// Sets the task status on the TaskEntry, and record the task status change events in
+  /// the TaskEventBuffer if enabled.
+  ///
+  /// \param task_entry corresponding TaskEntry of a task to record the event.
+  /// \param status new status.
+  /// \param state_update The state update for the task status change event.
+  /// \param include_task_info Whether to include task info in the task status change
+  /// event.
+  /// \param attempt_number The attempt number to record the task status change
+  /// event. If not specified, the attempt number will be the current attempt number of
+  /// the task.
+  void SetTaskStatus(
+      TaskEntry &task_entry,
+      rpc::TaskStatus status,
+      std::optional<worker::TaskStatusEvent::TaskStateUpdate> state_update = std::nullopt,
+      bool include_task_info = false,
+      std::optional<int32_t> attempt_number = std::nullopt);
 
   /// Update the task entry for the task attempt to reflect retry on resubmit.
   ///
