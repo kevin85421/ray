@@ -96,6 +96,7 @@ class GPUObjectManager:
             # is consumed once.
             gpu_object_manager.remove_gpu_object(obj_id)
 
+        print(f"_send_gpu_object: {obj_id} to {dst_rank}")
         src_actor.__ray_call__.remote(__ray_send__, obj_id, dst_rank)
 
     def _recv_gpu_object(
@@ -122,12 +123,17 @@ class GPUObjectManager:
             tensors = []
             for meta in tensor_meta:
                 shape, dtype = meta
-                tensor = torch.zeros(shape, dtype=dtype)
+                # TODO(kevin85421): Tensor should be in GPU if the tensor in the src side is in GPU.
+                tensor = torch.zeros(shape, dtype=dtype).to("cuda")
                 dist.recv(tensor, src_rank)
                 tensors.append(tensor)
             gpu_object_manager.add_gpu_object(obj_id, tensors)
 
+        print(
+            f"_recv_gpu_object: {obj_id} from {src_rank}, {tensor_meta}, dst_actor: {dst_actor}"
+        )
         dst_actor.__ray_call__.remote(__ray_recv__, obj_id, src_rank, tensor_meta)
+        print("__ray_recv__ done")
 
     def trigger_out_of_band_tensor_transfer(
         self, dst_actor: ActorHandle, task_args: Tuple[Any, ...]
