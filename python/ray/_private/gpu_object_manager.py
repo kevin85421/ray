@@ -94,7 +94,7 @@ class GPUObjectManager:
             # TODO(kevin85421): The current garbage collection implementation for the
             # in-actor object store is naive. We garbage collect each object after it
             # is consumed once.
-            gpu_object_manager.remove_gpu_object(obj_id)
+            # gpu_object_manager.remove_gpu_object(obj_id)
 
         print(f"_send_gpu_object: {obj_id} to {dst_rank}")
         src_actor.__ray_call__.remote(__ray_send__, obj_id, dst_rank)
@@ -127,6 +127,9 @@ class GPUObjectManager:
                 tensor = torch.zeros(shape, dtype=dtype).to("cuda")
                 dist.recv(tensor, src_rank)
                 tensors.append(tensor)
+            print(
+                f"_recv_gpu_object: {obj_id} from {src_rank}, add to gpu_object_store"
+            )
             gpu_object_manager.add_gpu_object(obj_id, tensors)
 
         print(
@@ -198,8 +201,12 @@ class GPUObjectManager:
             src_rank = actor_id_to_rank[src_actor._ray_actor_id]
             dst_rank = actor_id_to_rank[dst_actor._ray_actor_id]
             if src_rank == dst_rank:
-                raise ValueError(
-                    f"src_rank: {src_rank} and dst_rank: {dst_rank} are the same. This may cause deadlock for transports like NCCL."
+                print(
+                    f"src_rank: {src_rank} and dst_rank: {dst_rank} are the same. Skip."
                 )
+                continue
+                # raise ValueError(
+                #     f"src_rank: {src_rank} and dst_rank: {dst_rank} are the same. This may cause deadlock for transports like NCCL."
+                # )
             self._send_gpu_object(src_actor, arg.hex(), dst_rank)
             self._recv_gpu_object(dst_actor, arg.hex(), src_rank, tensor_meta)

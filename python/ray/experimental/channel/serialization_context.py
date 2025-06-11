@@ -149,7 +149,10 @@ class _SerializationContext:
         if isinstance(val, int):
             placeholder = val
             self._deserialized_tensor_placeholders.add(placeholder)
-            assert placeholder < len(self._out_of_band_tensors)
+            # print(f"placeholder: {placeholder}, len(self._out_of_band_tensors): {len(self._out_of_band_tensors)}")
+            assert placeholder < len(
+                self._out_of_band_tensors
+            ), f"placeholder: {placeholder} is out of range, {len(self._out_of_band_tensors)}"
             tensor = self._out_of_band_tensors[placeholder]
             if target_device == Device.CPU:
                 tensor = tensor.to("cpu")
