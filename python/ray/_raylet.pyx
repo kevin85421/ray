@@ -613,6 +613,7 @@ cdef RayObjectsToSerializedRayObjects(
                 metadata = Buffer.make(
                     objects[i].get().GetMetadata()).to_pybytes()
             tensor_transport = TensorTransportEnum(<int>(objects[i].get().GetTensorTransport()))
+            print(f"RayObjectsToSerializedRayObjects, tensor_transport={tensor_transport}")
             serialized_ray_objects.append(SerializedRayObject(data, metadata, tensor_transport))
     return serialized_ray_objects
 
@@ -621,11 +622,14 @@ cdef VectorToObjectRefs(const c_vector[CObjectReference] &object_refs,
                         skip_adding_local_ref):
     result = []
     for i in range(object_refs.size()):
+        tensor_transport_val = <int>object_refs[i].tensor_transport()
+        print(f"VectorToObjectRefs, tensor_transport={tensor_transport_val}")
         result.append(ObjectRef(
             object_refs[i].object_id(),
             object_refs[i].owner_address().SerializeAsString(),
             object_refs[i].call_site(),
-            skip_adding_local_ref=skip_adding_local_ref))
+            skip_adding_local_ref=skip_adding_local_ref,
+            tensor_transport_val=tensor_transport_val))
     return result
 
 
@@ -1872,6 +1876,7 @@ cdef void execute_task(
                 if c_args.empty():
                     args, kwargs = [], {}
                 else:
+                    # TODO
                     metadata_pairs = RayObjectsToSerializedRayObjects(c_args)
                     object_refs = VectorToObjectRefs(
                             c_arg_refs,

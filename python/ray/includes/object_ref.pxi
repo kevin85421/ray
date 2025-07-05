@@ -1,4 +1,5 @@
 from ray.includes.unique_ids cimport CObjectID
+from ray._private.custom_types import TensorTransportEnum
 
 import asyncio
 import concurrent.futures
@@ -40,11 +41,12 @@ cdef class ObjectRef(BaseID):
 
     def __init__(
             self, id, owner_addr="", call_site_data="",
-            skip_adding_local_ref=False):
+            skip_adding_local_ref=False, tensor_transport_val=0):
         self._set_id(id)
         self.owner_addr = owner_addr
         self.in_core_worker = False
         self.call_site_data = call_site_data
+        self.tensor_transport_val = tensor_transport_val
 
         worker = ray._private.worker.global_worker
         # TODO(edoakes): We should be able to remove the in_core_worker flag.
@@ -152,3 +154,6 @@ cdef class ObjectRef(BaseID):
         core_worker = ray._private.worker.global_worker.core_worker
         core_worker.set_get_async_callback(self, py_callback)
         return self
+
+    def tensor_transport(self):
+        return TensorTransportEnum(self.tensor_transport_val)

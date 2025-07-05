@@ -275,6 +275,8 @@ std::vector<rpc::ObjectReference> TaskManager::AddPendingTask(
     ref.set_object_id(spec.ReturnId(i).Binary());
     ref.mutable_owner_address()->CopyFrom(caller_address);
     ref.set_call_site(call_site);
+    ref.set_tensor_transport(spec.TensorTransport());
+    RAY_LOG(DEBUG) << "AddPendingTask ref.tensor_transport=" << ref.tensor_transport() << " " << spec.ReturnId(i);
     returned_refs.push_back(std::move(ref));
   }
 
