@@ -156,4 +156,4 @@ cdef class ObjectRef(BaseID):
         return self
 
     def tensor_transport(self):
-        return TensorTransportEnum(self.tensor_transport_val)
+        return self.tensor_transport_val
